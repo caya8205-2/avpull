@@ -1,6 +1,6 @@
 {
   "name": "avpull",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "description": "Download audio/video from YouTube, convert directly to your chosen format (mp3, wav, mp4, etc.)",
   "type": "module",
   "bin": {
