@@ -52,7 +52,7 @@ jobs:
           files: |
             dist/avpull.exe
             dist/ffmpeg.exe
-            install.ps1
+            landing/install.ps1
           draft: false
           prerelease: false
           generate_release_notes: true
