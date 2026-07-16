@@ -40,11 +40,11 @@ jobs:
         run: |
           $version = "${{ steps.version.outputs.version }}"
           
-          try {
-            gh api "repos/${{ github.repository }}/releases/tags/v$version" 2>&1 | Out-Null
+          $response = gh api "repos/${{ github.repository }}/releases/tags/v$version" 2>&1
+          if ($LASTEXITCODE -eq 0) {
             "exists=true" >> $env:GITHUB_OUTPUT
             Write-Host "Release v$version already exists. Skipping."
-          } catch {
+          } else {
             "exists=false" >> $env:GITHUB_OUTPUT
             Write-Host "Release v$version not found. Will create."
           }
