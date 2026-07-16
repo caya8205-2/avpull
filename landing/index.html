@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Download audio/video from YouTube, convert directly to your chosen format — mp3, wav, mp4, and more. No sketchy third-party sites, just Node.js.">
+  <title>avpull — YouTube Audio/Video Downloader & Converter</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <nav>
+    <div class="nav-inner">
+      <span class="logo">avpull</span>
+      <div class="nav-links">
+        <a href="#features">features</a>
+        <a href="#install">install</a>
+        <a href="#usage">usage</a>
+        <a href="https://github.com/caya8205-2/avpull" target="_blank" rel="noopener">github</a>
+      </div>
+    </div>
+  </nav>
+
+  <header>
+    <h1>avpull</h1>
+    <p class="tagline">Download audio/video from YouTube, convert directly to your chosen format — mp3, wav, mp4, and more. No sketchy third-party sites.</p>
+    <div class="hero-actions">
+      <a href="#install" class="btn btn-primary">Install</a>
+      <a href="#usage" class="btn btn-secondary">Read docs</a>
+    </div>
+    <div class="hero-example">
+      <code>avpull "https://youtu.be/dQw4w9WgXcQ" -f mp3 -q 320</code>
+    </div>
+  </header>
+
+  <main>
+    <section id="features">
+      <h2>features</h2>
+      <div class="grid">
+        <div class="card">
+          <h3>△ single command</h3>
+          <p>One command to download and convert. No third-party converter sites, no external binaries.</p>
+        </div>
+        <div class="card">
+          <h3>♪ audio formats</h3>
+          <p>mp3, wav, flac, opus, m4a, aac, ogg — pick what you need.</p>
+        </div>
+        <div class="card">
+          <h3>▣ video formats</h3>
+          <p>mp4, webm, mkv, avi, mov — with quality selection up to 1080p.</p>
+        </div>
+        <div class="card">
+          <h3>⚡ batch mode</h3>
+          <p>Download multiple URLs from a text file, one per line.</p>
+        </div>
+        <div class="card">
+          <h3>⚙ custom quality</h3>
+          <p>Set audio bitrate (192, 320 kbps) or video resolution (720p, 1080p).</p>
+        </div>
+        <div class="card">
+          <h3>💾 custom output</h3>
+          <p>Name your files and choose output directory with <code>-n</code> and <code>-o</code>.</p>
+        </div>
+      </div>
+    </section>
+
+    <section id="install">
+      <h2>install</h2>
+
+      <div class="install-tabs">
+        <button class="tab active" data-tab="win">Windows</button>
+        <button class="tab" data-tab="npm">npm</button>
+        <button class="tab" data-tab="build">Build from source</button>
+      </div>
+
+      <div class="tab-content active" id="tab-win">
+        <p>One-line install (run in PowerShell as Administrator):</p>
+        <pre><code>powershell -ExecutionPolicy Bypass -c "irm https://raw.githubusercontent.com/caya8205-2/avpull/main/install.ps1 | iex"</code></pre>
+        <p>Or download from <a href="https://github.com/caya8205-2/avpull/releases/latest" target="_blank" rel="noopener">GitHub Releases</a>.</p>
+      </div>
+
+      <div class="tab-content" id="tab-npm">
+        <p>Install globally via npm:</p>
+        <pre><code>npm install -g avpull</code></pre>
+      </div>
+
+      <div class="tab-content" id="tab-build">
+        <p>Clone the repository and build with Bun:</p>
+        <pre><code>git clone https://github.com/caya8205-2/avpull.git
+cd avpull
+bun install
+bun run build</code></pre>
+      </div>
+    </section>
+
+    <section id="usage">
+      <h2>usage</h2>
+
+      <div class="usage-group">
+        <h3>Basic download</h3>
+        <pre><code>avpull "https://youtu.be/VIDEO_ID"</code></pre>
+        <p class="desc">Downloads and converts to mp3 by default (192 kbps).</p>
+      </div>
+
+      <div class="usage-group">
+        <h3>Custom format and quality</h3>
+        <pre><code>avpull "https://youtu.be/VIDEO_ID" -f mp4 -q 1080</code></pre>
+        <p class="desc">Download video in mp4 format at 1080p resolution.</p>
+      </div>
+
+      <div class="usage-group">
+        <h3>Batch download</h3>
+        <pre><code>avpull -b urls.txt</code></pre>
+        <pre><code># urls.txt
+https://youtu.be/VIDEO_1
+https://youtu.be/VIDEO_2
+# lines starting with # are ignored</code></pre>
+        <p class="desc">Process multiple URLs from a text file.</p>
+      </div>
+
+      <div class="usage-group">
+        <h3>Custom output and filename</h3>
+        <pre><code>avpull "https://youtu.be/VIDEO_ID" -o ./downloads -n "my-song" -f wav -q 320</code></pre>
+        <p class="desc">Save to a specific directory with a custom filename.</p>
+      </div>
+
+      <div class="usage-group">
+        <h3>All options</h3>
+        <pre><code>avpull --help</code></pre>
+        <p class="desc">Display all available flags and options.</p>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <p>MIT License &middot; <a href="https://github.com/caya8205-2/avpull" target="_blank" rel="noopener">caya8205-2/avpull</a></p>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>
