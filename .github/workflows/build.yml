@@ -47,7 +47,7 @@ jobs:
       - name: Create Release (on tag)
         if: startsWith(github.ref, 'refs/tags/')
         id: create_release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v1
         with:
           files: |
             dist/avpull.exe
@@ -56,7 +56,6 @@ jobs:
           draft: false
           prerelease: false
           generate_release_notes: true
-          fail_on_unmatched_files: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       
