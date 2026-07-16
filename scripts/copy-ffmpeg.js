@@ -8,21 +8,31 @@ const projectDir = path.resolve(__dirname, '..');
 
 async function main() {
   // Copy ffmpeg binary
-  const { default: ffmpegStatic } = await import('ffmpeg-static');
-  if (ffmpegStatic && typeof ffmpegStatic === 'string') {
-    const dest = path.join(distDir, path.basename(ffmpegStatic));
-    fs.mkdirSync(distDir, { recursive: true });
-    fs.cpSync(ffmpegStatic, dest);
-    console.log(`Copied ${ffmpegStatic} -> ${dest}`);
-  } else {
-    console.warn('ffmpeg-static did not resolve to a path, skipping');
+  try {
+    const { default: ffmpegStatic } = await import('ffmpeg-static');
+    if (ffmpegStatic && typeof ffmpegStatic === 'string') {
+      const dest = path.join(distDir, path.basename(ffmpegStatic));
+      fs.mkdirSync(distDir, { recursive: true });
+      fs.cpSync(ffmpegStatic, dest);
+      console.log(`✓ Copied ffmpeg: ${dest}`);
+    } else {
+      console.warn('⚠ ffmpeg-static did not resolve to a path, skipping');
+    }
+  } catch (err) {
+    console.error('✗ Error copying ffmpeg:', err.message);
+    process.exit(1);
   }
 
-  // Copy install.ps1 for easy deployment
-  const installSrc = path.join(projectDir, 'install.ps1');
+  // Copy install.ps1 from landing folder
+  const installSrc = path.join(projectDir, 'landing', 'install.ps1');
   const installDest = path.join(distDir, 'install.ps1');
-  fs.cpSync(installSrc, installDest);
-  console.log(`Copied ${installSrc} -> ${installDest}`);
+  
+  if (fs.existsSync(installSrc)) {
+    fs.cpSync(installSrc, installDest);
+    console.log(`✓ Copied install.ps1: ${installDest}`);
+  } else {
+    console.warn('⚠ install.ps1 not found at:', installSrc);
+  }
 }
 
 main().catch(console.error);
