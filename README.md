@@ -40,6 +40,8 @@ avpull "https://youtu.be/VIDEO_ID" -f mp3 -q 320
 powershell -ExecutionPolicy Bypass -c "irm https://caya8205-2.github.io/avpull/install.ps1 | iex"
 ```
 
+This downloads and installs from the latest GitHub Release.
+
 ### Option 2: npm
 
 ```powershell
