@@ -7,15 +7,42 @@
     "avpull": "./bin/avpull.js"
   },
   "main": "src/cli.js",
-  "author": "",
-  "license": "ISC",
+  "author": "caya8205-2",
+  "license": "MIT",
+  "keywords": [
+    "youtube",
+    "downloader",
+    "converter",
+    "audio",
+    "video",
+    "mp3",
+    "mp4",
+    "cli",
+    "ffmpeg",
+    "youtubei"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/caya8205-2/avpull.git"
+  },
+  "bugs": {
+    "url": "https://github.com/caya8205-2/avpull/issues"
+  },
+  "homepage": "https://caya8205-2.github.io/avpull",
   "engines": {
     "node": ">=18"
   },
+  "files": [
+    "bin/",
+    "src/",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "build": "bun build --compile --target=bun --outfile=dist/avpull ./bin/avpull.js",
     "release": "bun run build && node scripts/copy-ffmpeg.js",
-    "release:version": "powershell -ExecutionPolicy Bypass -File scripts/release.ps1"
+    "release:version": "powershell -ExecutionPolicy Bypass -File scripts/release.ps1",
+    "prepublishOnly": "echo 'Ready to publish to npm'"
   },
   "dependencies": {
     "commander": "^15.0.0",

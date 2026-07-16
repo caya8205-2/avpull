@@ -10,6 +10,7 @@
 
 [![Node.js](https://img.shields.io/badge/Node.js-18+-43853d?style=flat&logo=node.js&logoColor=white)](https://nodejs.org/)
 [![Bun](https://img.shields.io/badge/Bun-1.0+-f472b6?style=flat&logo=bun&logoColor=white)](https://bun.sh/)
+[![youtubei.js](https://img.shields.io/badge/youtubei.js-17.2.0-red?style=flat&logo=youtube&logoColor=white)](https://github.com/LuanRT/YouTube.js)
 [![FFmpeg](https://img.shields.io/badge/FFmpeg-bundled-007808?style=flat&logo=ffmpeg&logoColor=white)](https://ffmpeg.org/)
 [![License](https://img.shields.io/badge/license-MIT-blue?style=flat)](LICENSE)
 
@@ -19,7 +20,7 @@
 
 ---
 
-## 🚀 Quick Start
+## Quick Start
 
 ```powershell
 # Install globally
@@ -31,15 +32,13 @@ avpull "https://youtu.be/VIDEO_ID" -f mp3 -q 320
 
 ---
 
-## 📦 Installation
+## Installation
 
 ### Option 1: One-line Install (Windows)
 
 ```powershell
-powershell -ExecutionPolicy Bypass -c "irm https://[your-domain]/install.ps1 | iex"
+powershell -ExecutionPolicy Bypass -c "irm https://caya8205-2.github.io/avpull/install.ps1 | iex"
 ```
-
-Replace `[your-domain]` with your deployment URL (GitHub Pages/Vercel).
 
 ### Option 2: npm
 
@@ -60,7 +59,7 @@ bun run build
 
 ---
 
-## 💻 Usage
+## Usage
 
 ### Basic Download
 
@@ -113,7 +112,7 @@ avpull
 
 ---
 
-## ⚙️ Options
+## Options
 
 | Flag | Description |
 |---|---|
@@ -126,7 +125,7 @@ avpull
 
 ---
 
-## 🔧 Technical Details
+## Technical Details
 
 ### Architecture
 
@@ -145,7 +144,7 @@ avpull
 
 ---
 
-## 📝 Development
+## Development
 
 ### Local Setup (npm link)
 
@@ -172,20 +171,6 @@ bun run release
 
 ---
 
-## 📄 License
+## License
 
 MIT License — see [LICENSE](LICENSE) for details.
-
----
-
-## 🔗 Links
-
-- **Repository:** [github.com/caya8205-2/avpull](https://github.com/caya8205-2/avpull)
-- **Issues:** [Report a bug](https://github.com/caya8205-2/avpull/issues)
-- **Landing Page:** [your-domain] (coming soon)
-
----
-
-<div align="center">
-  <sub>Built with ❤️ using Node.js and FFmpeg</sub>
-</div>

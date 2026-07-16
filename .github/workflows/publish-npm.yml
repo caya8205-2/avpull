@@ -1,0 +1,64 @@
+name: Publish to npm
+
+on:
+  release:
+    types: [published]
+  repository_dispatch:
+    types: [release-created]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to publish (leave empty for package.json version)'
+        required: false
+        type: string
+
+jobs:
+  publish:
+    name: Publish to npm Registry
+    runs-on: ubuntu-latest
+    
+    permissions:
+      contents: read
+      id-token: write
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+      
+      - name: Install dependencies
+        run: npm install
+      
+      - name: Update version (if specified)
+        if: github.event.inputs.version
+        run: npm version ${{ github.event.inputs.version }} --no-git-tag-version
+      
+      - name: Publish to npm
+        run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      
+      - name: Get package info
+        id: package
+        run: |
+          echo "name=$(node -p "require('./package.json').name")" >> $GITHUB_OUTPUT
+          echo "version=$(node -p "require('./package.json').version")" >> $GITHUB_OUTPUT
+      
+      - name: Create summary
+        run: |
+          echo "### 📦 Published to npm" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Package:** \`${{ steps.package.outputs.name }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Version:** \`${{ steps.package.outputs.version }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Install:**" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
+          echo "npm install -g ${{ steps.package.outputs.name }}" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**npm page:** https://www.npmjs.com/package/${{ steps.package.outputs.name }}" >> $GITHUB_STEP_SUMMARY

@@ -79,6 +79,14 @@ pre {
   overflow-y: hidden;
   tab-size: 2;
   max-width: 100%;
+  position: relative;
+  word-wrap: break-word;
+  white-space: pre-wrap;
+}
+
+pre::-webkit-scrollbar {
+  height: 0;
+  width: 0;
 }
 
 pre code {
@@ -86,6 +94,7 @@ pre code {
   padding: 0;
   border: none;
   font-size: inherit;
+  word-break: break-all;
 }
 
 /* Nav — N8 Terminal */
@@ -314,6 +323,14 @@ section h2 {
   color: var(--color-ink);
   margin-bottom: var(--space-sm);
   font-family: var(--font-mono);
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.card h3 svg {
+  flex-shrink: 0;
+  color: var(--color-accent);
 }
 
 .card p {
@@ -334,21 +351,11 @@ section h2 {
   border-bottom: var(--rule-width) solid var(--rule-color);
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
-  scrollbar-width: thin;
-  scrollbar-color: var(--color-paper-3) transparent;
+  scrollbar-width: none;
 }
 
 .install-tabs::-webkit-scrollbar {
-  height: 4px;
-}
-
-.install-tabs::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.install-tabs::-webkit-scrollbar-thumb {
-  background: var(--color-paper-3);
-  border-radius: 2px;
+  display: none;
 }
 
 .tab {
@@ -429,6 +436,62 @@ section h2 {
   margin-top: var(--space-sm);
 }
 
+/* Code block with copy button */
+.code-block {
+  position: relative;
+}
+
+.code-block pre {
+  padding-right: calc(var(--space-lg) + 40px);
+}
+
+.copy-btn {
+  position: absolute;
+  top: var(--space-md);
+  right: var(--space-md);
+  background: var(--color-paper-2);
+  border: var(--rule-width) solid var(--rule-color);
+  border-radius: var(--radius-sm);
+  padding: var(--space-sm);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-ink-3);
+  transition: all var(--dur-fast) var(--ease-out);
+  opacity: 0.7;
+}
+
+.copy-btn:hover,
+.copy-btn.is-hover {
+  opacity: 1;
+  background: var(--color-paper-3);
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+
+.copy-btn:focus-visible,
+.copy-btn.is-focus {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+.copy-btn:active,
+.copy-btn.is-active {
+  transform: scale(0.95);
+}
+
+.copy-btn.copied {
+  background: var(--color-success);
+  border-color: var(--color-success);
+  color: var(--color-paper);
+}
+
+.copy-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
 /* Footer — Ft6 Mono-cap */
 footer {
   max-width: var(--width-wide);
@@ -487,6 +550,25 @@ footer a:hover {
   .hero-actions .btn {
     width: 100%;
     justify-content: center;
+  }
+  
+  .code-block pre {
+    padding-right: var(--space-lg);
+    font-size: 0.8rem;
+  }
+  
+  .copy-btn {
+    position: static;
+    width: 100%;
+    margin-top: var(--space-sm);
+    justify-content: center;
+    gap: var(--space-sm);
+  }
+  
+  .copy-btn::after {
+    content: "Copy";
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
   }
 }
 
