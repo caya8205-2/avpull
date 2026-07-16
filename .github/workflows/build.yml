@@ -48,6 +48,7 @@ jobs:
             "exists=false" >> $env:GITHUB_OUTPUT
             Write-Host "Release v$version not found. Will create."
           }
+          exit 0
       
       - name: Skip build if release exists
         if: steps.check_release.outputs.exists == 'true'
@@ -63,7 +64,13 @@ jobs:
       
       - name: Copy ffmpeg to dist
         if: steps.check_release.outputs.exists == 'false'
-        run: node scripts/copy-ffmpeg.js
+        shell: pwsh
+        run: |
+          node scripts/copy-ffmpeg.js
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "Failed to copy ffmpeg"
+            exit 1
+          }
       
       - name: Upload build artifacts
         if: steps.check_release.outputs.exists == 'false'
@@ -78,17 +85,22 @@ jobs:
       
       - name: Create GitHub Release
         if: steps.check_release.outputs.exists == 'false'
-        uses: softprops/action-gh-release@v2
+        shell: pwsh
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: v${{ steps.version.outputs.version }}
-          name: v${{ steps.version.outputs.version }}
-          generate_release_notes: true
-          files: |
-            dist/avpull.exe
-            dist/ffmpeg.exe
-            dist/install.ps1
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $version = "${{ steps.version.outputs.version }}"
+          gh release create "v$version" `
+            dist/avpull.exe `
+            dist/ffmpeg.exe `
+            dist/install.ps1 `
+            --title "v$version" `
+            --generate-notes
+          
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "Failed to create release"
+            exit 1
+          }
       
       - name: Trigger npm publish
         if: steps.check_release.outputs.exists == 'false'
