@@ -39,15 +39,15 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           $version = "${{ steps.version.outputs.version }}"
-          gh release view "v$version" --json tagName 2>$null | Out-Null
-          if ($LASTEXITCODE -eq 0) {
+          
+          try {
+            gh api "repos/${{ github.repository }}/releases/tags/v$version" 2>&1 | Out-Null
             "exists=true" >> $env:GITHUB_OUTPUT
             Write-Host "Release v$version already exists. Skipping."
-          } else {
+          } catch {
             "exists=false" >> $env:GITHUB_OUTPUT
             Write-Host "Release v$version not found. Will create."
           }
-          exit 0
       
       - name: Skip build if release exists
         if: steps.check_release.outputs.exists == 'true'
@@ -78,7 +78,7 @@ jobs:
       
       - name: Create GitHub Release
         if: steps.check_release.outputs.exists == 'false'
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
