@@ -2,50 +2,38 @@ name: CI
 
 on:
   push:
-    branches: [main, master]
+    branches: [main]
   pull_request:
-    branches: [main, master]
+    branches: [main]
 
 jobs:
-  lint:
-    name: Lint & Type Check
-    runs-on: ubuntu-latest
-    
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-      
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v1
-        with:
-          bun-version: latest
-      
-      - name: Install dependencies
-        run: bun install
-      
-      - name: Check build
-        run: bun run build
-  
-  build-artifacts:
-    name: Build Artifacts Check
+  build:
     runs-on: windows-latest
-    
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-      
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v1
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
-      
-      - name: Install dependencies
-        run: bun install
-      
-      - name: Build and verify
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - run: bun install
+
+      - name: Build binary
+        run: bun run build
+
+      - name: Copy ffmpeg
+        run: node scripts/copy-ffmpeg.js
+
+      - name: Verify artifacts
         run: |
-          bun run build
-          node scripts/copy-ffmpeg.js
-          if (!(Test-Path dist/avpull.exe)) { throw "avpull.exe not found" }
-          if (!(Test-Path dist/ffmpeg.exe)) { throw "ffmpeg.exe not found" }
-        shell: pwsh
+          if (!(Test-Path dist/avpull.exe)) { exit 1 }
+          if (!(Test-Path dist/ffmpeg.exe)) { exit 1 }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: avpull-windows
+          path: dist/

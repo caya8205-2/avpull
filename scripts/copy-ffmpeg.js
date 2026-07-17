@@ -23,8 +23,8 @@ async function main() {
     process.exit(1);
   }
 
-  // Copy install.ps1 from landing folder
-  const installSrc = path.join(projectDir, 'landing', 'install.ps1');
+  // Copy install.ps1 from site/public folder
+  const installSrc = path.join(projectDir, 'site', 'public', 'install.ps1');
   const installDest = path.join(distDir, 'install.ps1');
   
   if (fs.existsSync(installSrc)) {

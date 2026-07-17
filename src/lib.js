@@ -39,9 +39,8 @@ export const AUDIO_FORMATS = ['mp3', 'wav', 'm4a', 'opus', 'flac', 'aac', 'ogg']
 export const VIDEO_FORMATS = ['mp4', 'webm', 'mkv'];
 export const SUPPORTED_FORMATS = [...AUDIO_FORMATS, ...VIDEO_FORMATS];
 
-// Same fallback order Noctune's resolver uses in production — WEB alone
-// often can't decipher without a po_token, but these usually can.
-const YOUTUBEI_CLIENTS = ['ANDROID', 'IOS', 'WEB', 'MWEB', 'TV_SIMPLY', 'ANDROID_VR'];
+// ANDROID_VR works most reliably, use it first.
+const YOUTUBEI_CLIENTS = ['ANDROID_VR', 'ANDROID', 'IOS', 'WEB', 'MWEB', 'TV_SIMPLY'];
 
 let clientPromise = null;
 
@@ -283,13 +282,15 @@ async function downloadFormatToFile(format, tmpPath, onProgress) {
 /** Guess audio ffmpeg codec args to go from a source mime_type to a target extension. */
 function buildAudioArgs({ sourceMime, targetExt, quality, input }) {
   const args = ['-y', '-i', input || 'pipe:0', '-vn'];
-  const bitrate = quality ? `${quality}k` : '192k';
+  const q = Number(quality);
+  const bitrate = Number.isFinite(q) && q > 0 ? `${q}k` : null;
   const sourceIsOpus = /opus/i.test(sourceMime || '');
   const sourceIsAac = /mp4a/i.test(sourceMime || '');
 
   switch (targetExt) {
     case 'mp3':
-      args.push('-acodec', 'libmp3lame', '-b:a', bitrate);
+      args.push('-acodec', 'libmp3lame');
+      if (bitrate) args.push('-b:a', bitrate);
       break;
     case 'wav':
       args.push('-acodec', 'pcm_s16le');
@@ -298,17 +299,21 @@ function buildAudioArgs({ sourceMime, targetExt, quality, input }) {
       args.push('-acodec', 'flac');
       break;
     case 'ogg':
-      args.push('-acodec', 'libvorbis', '-b:a', bitrate);
+      args.push('-acodec', 'libvorbis');
+      if (bitrate) args.push('-b:a', bitrate);
       break;
     case 'opus':
-      sourceIsOpus ? args.push('-acodec', 'copy') : args.push('-acodec', 'libopus', '-b:a', bitrate);
+      sourceIsOpus ? args.push('-acodec', 'copy') : args.push('-acodec', 'libopus');
+      if (bitrate && !sourceIsOpus) args.push('-b:a', bitrate);
       break;
     case 'm4a':
     case 'aac':
-      sourceIsAac ? args.push('-acodec', 'copy') : args.push('-acodec', 'aac', '-b:a', bitrate);
+      sourceIsAac ? args.push('-acodec', 'copy') : args.push('-acodec', 'aac');
+      if (bitrate && !sourceIsAac) args.push('-b:a', bitrate);
       break;
     default:
-      args.push('-acodec', 'libmp3lame', '-b:a', bitrate);
+      args.push('-acodec', 'libmp3lame');
+      if (bitrate) args.push('-b:a', bitrate);
   }
   return args;
 }

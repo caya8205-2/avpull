@@ -12,9 +12,80 @@ import {
   isVideoFormat,
   safeFilename,
   formatBytes,
+  AUDIO_FORMATS,
+  VIDEO_FORMATS,
   SUPPORTED_FORMATS
 } from './lib.js';
+import https from 'node:https';
 import { log, c, askLine, spinner } from './ui.js';
+
+const CURRENT_VERSION = '0.3.0';
+const CONFIG_DIR = path.join(os.homedir(), '.avpull');
+const CONFIG_FILE = path.join(CONFIG_DIR, 'config.json');
+
+function loadConfig() {
+  try {
+    return JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf-8'));
+  } catch {
+    return {};
+  }
+}
+
+function saveConfig(key, value) {
+  fs.mkdirSync(CONFIG_DIR, { recursive: true });
+  const cfg = loadConfig();
+  cfg[key] = value;
+  fs.writeFileSync(CONFIG_FILE, JSON.stringify(cfg, null, 2));
+}
+
+function getDefaultOutput() {
+  const env = process.env.AVPULL_OUTPUT;
+  if (env) return path.resolve(env);
+  const cfg = loadConfig();
+  if (cfg.defaultOutput) return cfg.defaultOutput;
+  return path.join(os.homedir(), 'Downloads', 'avpull');
+}
+
+function fetchJson(url) {
+  return new Promise((resolve, reject) => {
+    const req = https.get(url, { headers: { 'User-Agent': 'avpull-updater' }, timeout: 3000 }, (res) => {
+      if (res.statusCode !== 200) { res.destroy(); reject(new Error(`${res.statusCode}`)); return; }
+      let data = '';
+      res.on('data', (d) => data += d);
+      res.on('end', () => { try { resolve(JSON.parse(data)); } catch { reject(new Error('parse')); } });
+    });
+    req.on('error', reject);
+    req.on('timeout', () => { req.destroy(); reject(new Error('timeout')); });
+  });
+}
+
+function parseVersion(v) {
+  const m = String(v).replace(/^v/, '').match(/^(\d+)\.(\d+)\.(\d+)/);
+  return m ? [+m[1], +m[2], +m[3]] : [0, 0, 0];
+}
+
+function isNewer(a, b) {
+  for (let i = 0; i < 3; i++) {
+    if (a[i] > b[i]) return true;
+    if (a[i] < b[i]) return false;
+  }
+  return false;
+}
+
+async function checkForUpdates() {
+  try {
+    const release = await fetchJson('https://api.github.com/repos/caya8205-2/avpull/releases/latest');
+    const latest = parseVersion(release.tag_name);
+    const current = parseVersion(CURRENT_VERSION);
+    if (!isNewer(latest, current)) return;
+
+    console.log();
+    log('UPDATE', c.yellow, `v${latest.join('.')} is available (current: v${current.join('.')})`);
+    log('INFO', c.cyan, '  npm:    npm i -g avpull@latest');
+    log('INFO', c.cyan, '  script: powershell -ExecutionPolicy Bypass -c "irm https://caya8205-2.github.io/avpull/install.ps1 | iex"');
+    console.log();
+  } catch {}
+}
 
 function uniquify(destNoExt, ext) {
   let out = `${destNoExt}.${ext}`;
@@ -118,11 +189,23 @@ async function processOne(client, rawUrl, opts, format, index, total) {
 }
 
 export async function runCli(argv) {
+  await checkForUpdates();
+
   const program = new Command();
 
   program
     .name('avpull')
     .description('Download audio/video from YouTube, convert directly to your chosen format (mp3, wav, mp4, etc.)');
+
+  program.addHelpText('after', `
+Examples:
+  avpull "https://youtu.be/VIDEO_ID"
+  avpull "https://youtu.be/VIDEO_ID" -f mp3 -q 320
+  avpull "https://youtu.be/VIDEO_ID" -f mp4 -q 1080 -o ./videos
+  avpull -b urls.txt -f wav
+  avpull "https://youtu.be/VIDEO_ID" -n "my song"
+  avpull -s ~/Music/avpull
+  avpull --show-default`);
 
   program.command('uninstall')
     .description('Remove avpull from the system (AppData + PATH)')
@@ -169,12 +252,27 @@ export async function runCli(argv) {
 
   program
     .argument('[urls...]', 'one or more YouTube URLs')
-    .option('-f, --format <format>', `output format (${SUPPORTED_FORMATS.join(', ')})`, 'mp3')
-    .option('-o, --output <dir>', 'output directory', path.join(os.homedir(), 'Downloads', 'avpull'))
+    .option('-f, --format <format>', `output format: ${AUDIO_FORMATS.join(', ')} (audio), ${VIDEO_FORMATS.join(', ')} (video)`, 'mp3')
+    .option('-o, --output <dir>', 'output directory')
+    .option('-s, --save-default <dir>', 'set and save default output directory')
+    .option('--show-default', 'show current default output directory')
     .option('-n, --name <name>', 'custom filename (no extension, only works with 1 URL)')
-    .option('-q, --quality <n>', 'audio: bitrate kbps (e.g. 192, 320). video: resolution (e.g. 720, 1080, best)')
+    .option('-q, --quality <n>', 'audio: bitrate kbps (128, 192, 256, 320, etc). video: resolution (240, 360, 480, 720, 1080) or best')
     .option('-b, --batch <file>', 'read URLs from a text file (one URL per line)')
     .action(async (urls, opts) => {
+      if (opts.showDefault) {
+        log('OK', c.cyan, getDefaultOutput());
+        return;
+      }
+
+      if (opts.saveDefault) {
+        const resolved = path.resolve(opts.saveDefault);
+        saveConfig('defaultOutput', resolved);
+        log('OK', c.green, `Default output set to: ${resolved}`);
+        if (!urls.length && !opts.batch) return;
+      }
+
+      opts.output = opts.output ? path.resolve(opts.output) : getDefaultOutput();
       const format = String(opts.format).toLowerCase();
       if (!SUPPORTED_FORMATS.includes(format)) {
         log('ERR', c.red, `Format "${format}" not supported. Options: ${SUPPORTED_FORMATS.join(', ')}`);
