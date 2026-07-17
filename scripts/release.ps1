@@ -43,6 +43,10 @@ $packageJson = Get-Content "package.json" -Raw | ConvertFrom-Json
 $packageJson.version = $Version
 $packageJson | ConvertTo-Json -Depth 100 | Set-Content "package.json"
 
+# Sync version to cli.js and lockfile
+Write-Host "🔄 Syncing version to cli.js..." -ForegroundColor Green
+bun run version:sync
+
 # Build
 Write-Host "🔨 Building binary..." -ForegroundColor Green
 bun run build

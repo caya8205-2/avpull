@@ -7,6 +7,16 @@ function writeJson(path, data) {
   writeFileSync(path, JSON.stringify(data, null, 2) + '\n');
 }
 
+// Sync CURRENT_VERSION in src/cli.js
+const cliPath = 'src/cli.js';
+let cli = readFileSync(cliPath, 'utf-8');
+cli = cli.replace(
+  /const CURRENT_VERSION = '[^']+';/,
+  `const CURRENT_VERSION = '${version}';`
+);
+writeFileSync(cliPath, cli);
+console.log(`✅ Updated CURRENT_VERSION in ${cliPath}`);
+
 // Sync npm lockfile workspace package versions without recalculating dependencies.
 const lock = JSON.parse(readFileSync('package-lock.json', 'utf-8'));
 lock.version = version;
