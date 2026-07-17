@@ -234,7 +234,8 @@ async function downloadFormatToFile(format, tmpPath, onProgress) {
   const total = format.content_length ? Number(format.content_length) : null;
   const agent = getAgent();
 
-  if (total && total >= CHUNK_MIN_SIZE) {
+  const MAX_BUFFER = 2147483647;
+  if (total && total >= CHUNK_MIN_SIZE && total <= MAX_BUFFER) {
     const chunkSize = Math.ceil(total / CHUNK_COUNT);
     const ranges = [];
     for (let i = 0; i < CHUNK_COUNT; i++) {
