@@ -8,6 +8,7 @@
 ╚═╝  ╚═╝   ╚═══╝   ╚═╝       ╚═════╝  ╚══════╝ ╚══════╝
 ```
 
+[![npm](https://img.shields.io/npm/v/avpull?style=flat&logo=npm&logoColor=white)](https://www.npmjs.com/package/avpull?activeTab=readme)
 [![Node.js](https://img.shields.io/badge/Node.js-18+-43853d?style=flat&logo=node.js&logoColor=white)](https://nodejs.org/)
 [![Bun](https://img.shields.io/badge/Bun-1.0+-f472b6?style=flat&logo=bun&logoColor=white)](https://bun.sh/)
 [![youtubei.js](https://img.shields.io/badge/youtubei.js-17.2.0-red?style=flat&logo=youtube&logoColor=white)](https://github.com/LuanRT/YouTube.js)
