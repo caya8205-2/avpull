@@ -110,28 +110,4 @@ jobs:
           event-type: release-created
           client-payload: '{"version": "v${{ steps.version.outputs.version }}"}'
   
-  deploy-pages:
-    name: Deploy Landing Page
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
-    
-    permissions:
-      contents: read
-      pages: write
-      id-token: write
-    
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-      
-      - name: Setup Pages
-        uses: actions/configure-pages@v4
-      
-      - name: Upload landing page
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: ./landing
-      
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
+
