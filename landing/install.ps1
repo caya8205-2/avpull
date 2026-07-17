@@ -7,12 +7,20 @@ param(
 
 $AppDir = "$env:LOCALAPPDATA\avpull"
 $BinPath = Join-Path $AppDir 'avpull.exe'
+$FfmpegPath = Join-Path $AppDir 'ffmpeg.exe'
+
+function Checkmark {
+  param([string]$Text)
+  Write-Host "  ✓ $Text" -ForegroundColor Green
+}
 
 function AddToPath {
   $current = [Environment]::GetEnvironmentVariable('PATH', 'User')
   if ($current -split ';' -notcontains $AppDir) {
     [Environment]::SetEnvironmentVariable('PATH', "$AppDir;$current", 'User')
-    Write-Host "  Added to PATH (user-level)" -ForegroundColor Green
+    Checkmark "Added to PATH (user-level)"
+  } else {
+    Write-Host "  ✓ PATH already contains avpull" -ForegroundColor Cyan
   }
 }
 
@@ -25,18 +33,20 @@ function RemoveFromPath {
 }
 
 function Dl($url, $out) {
-  Write-Host "  Downloading $(Split-Path $url -Leaf) ..." -NoNewline
+  $name = Split-Path $url -Leaf
+  Write-Host "  Downloading $name ..." -NoNewline
   $wc = New-Object System.Net.WebClient
   $wc.DownloadFile($url, $out)
-  Write-Host " done" -ForegroundColor Green
+  Write-Host " " -NoNewline
+  Checkmark "Downloaded $name"
 }
 
 function DoUninstall {
   Write-Host "Removing avpull ..." -ForegroundColor Yellow
-  if (Test-Path $AppDir) { Remove-Item $AppDir -Recurse -Force; Write-Host "  Removed $AppDir" -ForegroundColor Green }
+  if (Test-Path $AppDir) { Remove-Item $AppDir -Recurse -Force; Checkmark "Removed $AppDir" }
   RemoveFromPath
   Write-Host ""
-  Write-Host "avpull uninstalled." -ForegroundColor Green
+  Checkmark "avpull uninstalled"
 }
 
 # ── Uninstall flow ────────────────────────────────────────
@@ -62,18 +72,17 @@ $localExe = if ($scriptPath) { Join-Path $scriptPath 'avpull.exe' } else { $null
 if ($localExe -and (Test-Path $localExe)) {
   Write-Host "Installing from local files ..." -ForegroundColor Cyan
   Copy-Item -LiteralPath $localExe -Destination $BinPath -Force
-  Write-Host "  avpull.exe" -ForegroundColor Green
+  Checkmark "Copied avpull.exe"
   $localFfmpeg = Join-Path $scriptPath 'ffmpeg.exe'
   if (Test-Path $localFfmpeg) {
-    Copy-Item -LiteralPath $localFfmpeg -Destination (Join-Path $AppDir 'ffmpeg.exe') -Force
-    Write-Host "  ffmpeg.exe" -ForegroundColor Green
+    Copy-Item -LiteralPath $localFfmpeg -Destination $FfmpegPath -Force
+    Checkmark "Copied ffmpeg.exe"
   } else {
     Write-Host "  WARNING: ffmpeg.exe not found, must be in PATH" -ForegroundColor Yellow
   }
 } else {
   Write-Host "Fetching release info from GitHub ..." -ForegroundColor Cyan
   
-  # Determine download URL based on version
   if ($Version -eq "latest") {
     $apiUrl = "https://api.github.com/repos/$RepoOwner/$RepoName/releases/latest"
   } else {
@@ -84,9 +93,9 @@ if ($localExe -and (Test-Path $localExe)) {
     $release = Invoke-RestMethod -Uri $apiUrl -Headers @{ "User-Agent" = "avpull-installer" }
     $baseUrl = "https://github.com/$RepoOwner/$RepoName/releases/download/$($release.tag_name)"
     
-    Write-Host "  Installing version $($release.tag_name) ..." -ForegroundColor Green
+    Checkmark "Found release $($release.tag_name)"
     Dl "$baseUrl/avpull.exe" $BinPath
-    Dl "$baseUrl/ffmpeg.exe" (Join-Path $AppDir 'ffmpeg.exe')
+    Dl "$baseUrl/ffmpeg.exe" $FfmpegPath
   } catch {
     Write-Host ""
     Write-Host "ERROR: Failed to fetch release from GitHub." -ForegroundColor Red
@@ -100,5 +109,9 @@ if ($localExe -and (Test-Path $localExe)) {
 
 AddToPath
 Write-Host ""
-Write-Host "avpull installed!" -ForegroundColor Cyan
+Checkmark "Installation complete"
+Write-Host ""
+Write-Host "Installed to:" -ForegroundColor Cyan
+Write-Host "  $AppDir" -ForegroundColor White
+Write-Host ""
 Write-Host "Open a new terminal and run: avpull --help" -ForegroundColor White
