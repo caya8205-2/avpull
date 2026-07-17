@@ -170,7 +170,7 @@ export async function runCli(argv) {
   program
     .argument('[urls...]', 'one or more YouTube URLs')
     .option('-f, --format <format>', `output format (${SUPPORTED_FORMATS.join(', ')})`, 'mp3')
-    .option('-o, --output <dir>', 'output directory', 'avpull')
+    .option('-o, --output <dir>', 'output directory', path.join(os.homedir(), 'Downloads', 'avpull'))
     .option('-n, --name <name>', 'custom filename (no extension, only works with 1 URL)')
     .option('-q, --quality <n>', 'audio: bitrate kbps (e.g. 192, 320). video: resolution (e.g. 720, 1080, best)')
     .option('-b, --batch <file>', 'read URLs from a text file (one URL per line)')

@@ -200,47 +200,6 @@ export async function fetchStream(client, videoId, { formatKind, quality }) {
   };
 }
 
-/** Fetch a deciphered format URL as a Node Readable stream, with YouTube's expected headers. */
-function openFormatStream(format, rangeStart) {
-  return new Promise((resolve, reject) => {
-    const maxAttempts = 2;
-    const doFetch = (attempt) => {
-      let res;
-      const headers = { ...Constants.STREAM_HEADERS };
-      if (rangeStart > 0) {
-        headers['Range'] = `bytes=${rangeStart}-`;
-      }
-      const req = https.get(format.url, { headers }, (response) => {
-        res = response;
-        if (rangeStart > 0 && res.statusCode === 206) {
-          resolve(res);
-        } else if (!rangeStart && res.statusCode === 200) {
-          resolve(res);
-        } else {
-          res.destroy();
-          const msg = rangeStart > 0
-            ? `Failed to resume stream: ${res.statusCode} ${res.statusMessage}`
-            : `Failed to fetch stream: ${res.statusCode} ${res.statusMessage}`;
-          reject(new Error(msg));
-        }
-      });
-      req.on('error', (err) => {
-        if (attempt < maxAttempts) {
-          setTimeout(() => doFetch(attempt + 1), 1000 * attempt);
-        } else {
-          reject(err);
-        }
-      });
-      req.on('socket', (socket) => {
-        socket.on('error', (err) => {
-          if (res) res.destroy(err);
-        });
-      });
-    };
-    doFetch(1);
-  });
-}
-
 async function runFfmpeg(args, onStderr) {
   const ffmpeg = await resolveFfmpeg();
   return new Promise((resolve, reject) => {
@@ -251,21 +210,74 @@ async function runFfmpeg(args, onStderr) {
   });
 }
 
-/** Save a Node Readable stream to a file on disk, reporting cumulative bytes. */
-function pipeToFile(nodeReadable, filePath, opts) {
-  const { append, offset, onBytes } = opts || {};
-  return new Promise((resolve, reject) => {
-    const out = fs.createWriteStream(filePath, append ? { flags: 'a' } : undefined);
-    let written = offset || 0;
-    nodeReadable.on('data', (chunk) => {
-      written += chunk.length;
-      onBytes?.(written);
+// ── HTTP agent (keep-alive) ──────────────────────────────
+let _agent;
+function getAgent() {
+  if (!_agent) _agent = new https.Agent({ keepAlive: true, maxSockets: 20 });
+  return _agent;
+}
+
+// ── Parallel chunked download ────────────────────────────
+const CHUNK_COUNT = 6;
+const CHUNK_MIN_SIZE = 1024 * 1024;
+
+async function downloadFormatToFile(format, tmpPath, onProgress) {
+  const url = format.url;
+  const total = format.content_length ? Number(format.content_length) : null;
+  const agent = getAgent();
+
+  if (total && total >= CHUNK_MIN_SIZE) {
+    const chunkSize = Math.ceil(total / CHUNK_COUNT);
+    const ranges = [];
+    for (let i = 0; i < CHUNK_COUNT; i++) {
+      const start = i * chunkSize;
+      const end = Math.min(start + chunkSize - 1, total - 1);
+      if (start > end) break;
+      ranges.push({ start, end });
+    }
+
+    fs.writeFileSync(tmpPath, Buffer.alloc(total));
+
+    let downloaded = 0;
+    await Promise.all(ranges.map(({ start, end }) =>
+      new Promise((resolve, reject) => {
+        const headers = { ...Constants.STREAM_HEADERS, Range: `bytes=${start}-${end}` };
+        https.get(url, { headers, agent }, (res) => {
+          if (res.statusCode !== 206) {
+            reject(new Error(`Chunk (${start}-${end}) failed: ${res.statusCode} ${res.statusMessage}`));
+            return;
+          }
+          const parts = [];
+          res.on('data', (d) => parts.push(d));
+          res.on('end', () => {
+            const buf = Buffer.concat(parts);
+            const fd = fs.openSync(tmpPath, 'r+');
+            fs.writeSync(fd, buf, 0, buf.length, start);
+            fs.closeSync(fd);
+            downloaded += buf.length;
+            onProgress?.({ downloaded, total });
+            resolve();
+          });
+          res.on('error', reject);
+        }).on('error', reject);
+      })
+    ));
+    onProgress?.({ downloaded: total, total, done: true });
+  } else {
+    let downloaded = 0;
+    return new Promise((resolve, reject) => {
+      const out = fs.createWriteStream(tmpPath);
+      https.get(url, { headers: Constants.STREAM_HEADERS, agent }, (res) => {
+        if (res.statusCode !== 200) {
+          reject(new Error(`Stream failed: ${res.statusCode} ${res.statusMessage}`));
+          return;
+        }
+        res.on('data', (chunk) => { downloaded += chunk.length; onProgress?.({ downloaded, total }); });
+        res.pipe(out);
+        out.on('finish', () => { onProgress?.({ downloaded, total, done: true }); resolve(); });
+      }).on('error', reject);
     });
-    nodeReadable.on('error', reject);
-    out.on('error', reject);
-    out.on('finish', resolve);
-    nodeReadable.pipe(out);
-  });
+  }
 }
 
 /** Guess audio ffmpeg codec args to go from a source mime_type to a target extension. */
@@ -314,29 +326,7 @@ export async function convertAudioToFile({ format, destNoExt, targetExt, quality
   const tmpPath = path.join(tmpDir, 'raw.tmp');
 
   try {
-    const total = format.content_length ? Number(format.content_length) : undefined;
-    let downloaded = 0;
-    const maxChunkRetries = 4;
-
-    for (let attempt = 1; attempt <= maxChunkRetries; attempt++) {
-      try {
-        const stream = await openFormatStream(format, downloaded);
-        await pipeToFile(stream, tmpPath, {
-          append: downloaded > 0,
-          offset: downloaded,
-          onBytes: (b) => {
-            downloaded = b;
-            onProgress?.({ downloaded, total });
-          }
-        });
-        onProgress?.({ downloaded, total, done: true });
-        break;
-      } catch (err) {
-        if (downloaded === 0 || !total) throw err;
-        if (attempt === maxChunkRetries) throw err;
-        await new Promise(r => setTimeout(r, 1500 * attempt));
-      }
-    }
+    await downloadFormatToFile(format, tmpPath, onProgress);
 
     const args = buildAudioArgs({ sourceMime: format.mime_type, targetExt, quality, input: tmpPath });
     args.push(outPath);
@@ -378,14 +368,9 @@ export async function muxVideoToFile({ video, audio, destNoExt, targetExt, onPro
   };
 
   try {
-    const [videoStream, audioStream] = await Promise.all([
-      openFormatStream(video.format),
-      openFormatStream(audio.format)
-    ]);
-
     await Promise.all([
-      pipeToFile(videoStream, tmpVideo, { onBytes: (b) => { vBytes = b; emit(); } }),
-      pipeToFile(audioStream, tmpAudio, { onBytes: (b) => { aBytes = b; emit(); } })
+      downloadFormatToFile(video.format, tmpVideo, (p) => { vBytes = p.downloaded; emit(p.done); }),
+      downloadFormatToFile(audio.format, tmpAudio, (p) => { aBytes = p.downloaded; emit(p.done); }),
     ]);
     emit(true);
 
