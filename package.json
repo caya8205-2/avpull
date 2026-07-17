@@ -1,6 +1,6 @@
 {
   "name": "avpull",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Download audio/video from YouTube, convert directly to your chosen format (mp3, wav, mp4, etc.)",
   "type": "module",
   "bin": {
@@ -42,7 +42,8 @@
     "build": "bun build --compile --target=bun --outfile=dist/avpull ./bin/avpull.js",
     "release": "bun run build && node scripts/copy-ffmpeg.js",
     "release:version": "powershell -ExecutionPolicy Bypass -File scripts/release.ps1",
-    "prepublishOnly": "echo 'Ready to publish to npm'"
+    "prepublishOnly": "echo 'Ready to publish to npm'",
+    "version:sync": "bun scripts/sync-version.js"
   },
   "dependencies": {
     "commander": "^15.0.0",
