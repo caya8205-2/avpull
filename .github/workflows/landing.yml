@@ -4,6 +4,7 @@ on:
   push:
     branches: [main]
     paths: ['site/**']
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -32,9 +33,10 @@ jobs:
         working-directory: site
         run: bun run build
 
-      - uses: actions/upload-pages-artifact@v3
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
         with:
-          path: site/dist
+          path: ./site/dist
 
   deploy:
     needs: build
@@ -43,5 +45,6 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - id: deployment
+      - name: Deploy to GitHub Pages
+        id: deployment
         uses: actions/deploy-pages@v4

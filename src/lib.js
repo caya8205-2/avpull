@@ -153,7 +153,16 @@ async function chooseValidatedFormat(client, videoId, chooseOpts) {
   for (const clientType of YOUTUBEI_CLIENTS) {
     try {
       const info = await client.getBasicInfo(videoId, { client: clientType });
-      const format = info.chooseFormat(chooseOpts);
+      let format;
+      try {
+        format = info.chooseFormat(chooseOpts);
+      } catch {
+        if (chooseOpts.quality !== 'best') {
+          format = info.chooseFormat({ ...chooseOpts, quality: 'best' });
+        } else {
+          throw new Error('No matching formats found');
+        }
+      }
       const url = await format.decipher(info.actions.session.player);
       if (!url) throw new Error('No playable URL returned');
       if (isLimitedIosStream(url)) throw new Error('Skipping limited iOS stream URL');
