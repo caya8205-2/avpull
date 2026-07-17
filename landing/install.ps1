@@ -11,7 +11,7 @@ $FfmpegPath = Join-Path $AppDir 'ffmpeg.exe'
 
 function Checkmark {
   param([string]$Text)
-  Write-Host "  ✓ $Text" -ForegroundColor Green
+  Write-Host "  >> $Text" -ForegroundColor Green
 }
 
 function AddToPath {
