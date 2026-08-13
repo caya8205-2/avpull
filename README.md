@@ -12,6 +12,7 @@
 [![Node.js](https://img.shields.io/badge/Node.js-18+-43853d?style=flat&logo=node.js&logoColor=white)](https://nodejs.org/)
 [![Bun](https://img.shields.io/badge/Bun-1.0+-f472b6?style=flat&logo=bun&logoColor=white)](https://bun.sh/)
 [![youtubei.js](https://img.shields.io/badge/youtubei.js-17.2.0-red?style=flat&logo=youtube&logoColor=white)](https://github.com/LuanRT/YouTube.js)
+[![yt‑dlp](https://img.shields.io/badge/yt--dlp-bundled-red?style=flat&logo=youtube&logoColor=white)](https://github.com/yt-dlp/yt-dlp)
 [![FFmpeg](https://img.shields.io/badge/FFmpeg-bundled-007808?style=flat&logo=ffmpeg&logoColor=white)](https://ffmpeg.org/)
 [![License](https://img.shields.io/badge/license-MIT-blue?style=flat)](LICENSE)
 

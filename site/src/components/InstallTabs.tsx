@@ -30,7 +30,7 @@ export default function InstallTabs() {
         <div className="tab-content active">
           <p>One-line install (run in PowerShell as Administrator):</p>
           <CodeBlock
-            code={'powershell -ExecutionPolicy Bypass -c "irm https://caya8205-2.github.io/avpull/install.ps1 | iex"'}
+            code={'powershell -ExecutionPolicy Bypass -c "irm https://avpull.caya.web.id/install.ps1 | iex"'}
             id="install-cmd"
           />
           <p>
