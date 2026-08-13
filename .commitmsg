@@ -1,0 +1,6 @@
+fix: CI build and landing page 404
+
+- copy-ffmpeg.js: add fallback to download yt-dlp from GitHub releases
+  if youtube-dl-exec postinstall didn't provide the binary
+- vite.config.ts: change base from '/avpull/' to '/' for custom domain
+  (avpull.caya.web.id doesn't need the /avpull/ prefix)

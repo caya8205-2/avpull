@@ -35,21 +35,40 @@ async function main() {
   }
 
   // Copy yt-dlp binary
+  const ext = process.platform === 'win32' ? '.exe' : '';
+  const ytdlpDest = path.join(distDir, `yt-dlp${ext}`);
+  let ytdlpCopied = false;
+
+  // Try 1: Copy from youtube-dl-exec package
   try {
     const { createRequire } = await import('node:module');
     const require = createRequire(import.meta.url);
     const pkgDir = path.dirname(require.resolve('youtube-dl-exec/package.json'));
-    const ext = process.platform === 'win32' ? '.exe' : '';
     const ytdlpSrc = path.join(pkgDir, 'bin', `yt-dlp${ext}`);
     if (fs.existsSync(ytdlpSrc)) {
-      const ytdlpDest = path.join(distDir, `yt-dlp${ext}`);
       fs.cpSync(ytdlpSrc, ytdlpDest);
       console.log(`✓ Copied yt-dlp: ${ytdlpDest}`);
-    } else {
-      console.warn('⚠ yt-dlp binary not found at:', ytdlpSrc);
+      ytdlpCopied = true;
     }
-  } catch (err) {
-    console.warn('⚠ Could not copy yt-dlp:', err.message);
+  } catch {}
+
+  // Try 2: Download from GitHub releases
+  if (!ytdlpCopied) {
+    console.log('⏳ yt-dlp binary not found locally, downloading from GitHub...');
+    const binName = process.platform === 'win32' ? 'yt-dlp.exe'
+      : process.platform === 'darwin' ? 'yt-dlp_macos' : 'yt-dlp';
+    const url = `https://github.com/yt-dlp/yt-dlp/releases/latest/download/${binName}`;
+    try {
+      const res = await fetch(url, { redirect: 'follow' });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const buf = Buffer.from(await res.arrayBuffer());
+      fs.writeFileSync(ytdlpDest, buf);
+      if (process.platform !== 'win32') fs.chmodSync(ytdlpDest, 0o755);
+      console.log(`✓ Downloaded yt-dlp: ${ytdlpDest}`);
+    } catch (err) {
+      console.error('✗ Failed to download yt-dlp:', err.message);
+      process.exit(1);
+    }
   }
 }
 
