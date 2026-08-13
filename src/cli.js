@@ -21,7 +21,7 @@ import { getMediaInfo, downloadWithYtDlp } from './ytdlp.js';
 import https from 'node:https';
 import { log, c, askLine, spinner } from './ui.js';
 
-const CURRENT_VERSION = '0.5.1';
+const CURRENT_VERSION = '0.6.0';
 const CONFIG_DIR = path.join(os.homedir(), '.avpull');
 const CONFIG_FILE = path.join(CONFIG_DIR, 'config.json');
 
@@ -252,7 +252,8 @@ export async function runCli(argv) {
 
   program
     .name('avpull')
-    .description('Download audio/video from YouTube, convert directly to your chosen format (mp3, wav, mp4, etc.)');
+    .description('Download audio/video from YouTube, convert directly to your chosen format (mp3, wav, mp4, etc.)')
+    .version(CURRENT_VERSION, '-v, --version', 'output the current version');
 
   program.addHelpText('after', `
 Examples:
@@ -315,13 +316,15 @@ Examples:
     .option('-f, --format <format>', `output format: ${AUDIO_FORMATS.join(', ')} (audio), ${VIDEO_FORMATS.join(', ')} (video)`, 'mp3')
     .option('-o, --output <dir>', 'output directory')
     .option('-s, --save-default <dir>', 'set and save default output directory')
-    .option('--show-default', 'show current default output directory')
+    .option('--sd, --show-default', 'show current default output directory')
     .option('-n, --name <name>', 'custom filename (no extension, only works with 1 URL)')
     .option('-q, --quality <n>', 'audio: bitrate kbps (128, 192, 256, 320, etc). video: resolution (240, 360, 480, 720, 1080) or best')
     .option('-b, --batch <file>', 'read URLs from a text file (one URL per line)')
     .option('--cookies-from-browser <browser>', 'use cookies from browser (chrome, firefox, edge, brave) — needed for Instagram/Facebook')
     .option('--cookies <file>', 'path to cookies.txt file (Netscape format)')
     .action(async (urls, opts) => {
+      // (action body unchanged, we just need to add the argv patch before parse)
+
       if (opts.showDefault) {
         log('OK', c.cyan, getDefaultOutput());
         return;
@@ -383,5 +386,9 @@ Examples:
       }
     });
 
+  const sdIndex = argv.indexOf('-sd');
+  if (sdIndex !== -1) {
+    argv[sdIndex] = '--sd';
+  }
   await program.parseAsync(argv);
 }
