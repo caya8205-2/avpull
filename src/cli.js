@@ -21,7 +21,7 @@ import { getMediaInfo, downloadWithYtDlp } from './ytdlp.js';
 import https from 'node:https';
 import { log, c, askLine, spinner } from './ui.js';
 
-const CURRENT_VERSION = '0.5.0';
+const CURRENT_VERSION = '0.5.1';
 const CONFIG_DIR = path.join(os.homedir(), '.avpull');
 const CONFIG_FILE = path.join(CONFIG_DIR, 'config.json');
 
@@ -83,8 +83,18 @@ async function checkForUpdates() {
 
     console.log();
     log('UPDATE', c.yellow, `v${latest.join('.')} is available (current: v${current.join('.')})`);
-    log('INFO', c.cyan, '  npm:    npm i -g avpull@latest');
-    log('INFO', c.cyan, '  script: powershell -ExecutionPolicy Bypass -c "irm https://avpull.caya.web.id/install.ps1 | iex"');
+    
+    // Detect how it's currently running
+    const execName = process.execPath.split(/[\\/]/).pop().toLowerCase();
+    const isStandalone = execName === 'avpull.exe' || execName === 'avpull';
+
+    if (isStandalone) {
+      log('INFO', c.cyan, '  Update command (Standalone/PowerShell):');
+      log('INFO', c.cyan, '  powershell -ExecutionPolicy Bypass -c "irm https://avpull.caya.web.id/install.ps1 | iex"');
+    } else {
+      log('INFO', c.cyan, '  Update command (NPM):');
+      log('INFO', c.cyan, '  npm i -g avpull@latest');
+    }
     console.log();
   } catch {}
 }
