@@ -251,24 +251,57 @@ async function downloadFormatToFile(format, tmpPath, onProgress) {
     await Promise.all(ranges.map(({ start, end }) =>
       new Promise((resolve, reject) => {
         const headers = { ...Constants.STREAM_HEADERS, Range: `bytes=${start}-${end}` };
-        https.get(url, { headers, agent }, (res) => {
+        const req = https.get(url, { headers, agent }, (res) => {
           if (res.statusCode !== 206) {
             reject(new Error(`Chunk (${start}-${end}) failed: ${res.statusCode} ${res.statusMessage}`));
             return;
           }
+          let timer;
+          let bytesSinceReset = 0;
+          const resetTimer = () => {
+            clearTimeout(timer);
+            bytesSinceReset = 0;
+            timer = setTimeout(() => {
+              req.destroy(new Error(`Chunk (${start}-${end}) Timeout: Speed too slow (< 512KB in 5s)`));
+            }, 5000);
+          };
+          resetTimer();
+
           const parts = [];
-          res.on('data', (d) => parts.push(d));
+          res.on('data', (d) => {
+            bytesSinceReset += d.length;
+            if (bytesSinceReset > 1024 * 512) {
+              resetTimer();
+            }
+            parts.push(d);
+          });
           res.on('end', () => {
+            clearTimeout(timer);
             const buf = Buffer.concat(parts);
-            const fd = fs.openSync(tmpPath, 'r+');
-            fs.writeSync(fd, buf, 0, buf.length, start);
-            fs.closeSync(fd);
+            const expected = end - start + 1;
+            if (buf.length !== expected) {
+              reject(new Error(`Chunk (${start}-${end}) truncated: got ${buf.length}, expected ${expected}`));
+              return;
+            }
+            try {
+              const fd = fs.openSync(tmpPath, 'r+');
+              fs.writeSync(fd, buf, 0, buf.length, start);
+              fs.closeSync(fd);
+            } catch (err) {
+              // tmp file might be deleted if another chunk rejected earlier
+              reject(err);
+              return;
+            }
             downloaded += buf.length;
             onProgress?.({ downloaded, total });
             resolve();
           });
-          res.on('error', reject);
-        }).on('error', reject);
+          res.on('error', (err) => {
+            clearTimeout(timer);
+            reject(err);
+          });
+        });
+        req.on('error', reject);
       })
     ));
     onProgress?.({ downloaded: total, total, done: true });
@@ -276,15 +309,42 @@ async function downloadFormatToFile(format, tmpPath, onProgress) {
     let downloaded = 0;
     return new Promise((resolve, reject) => {
       const out = fs.createWriteStream(tmpPath);
-      https.get(url, { headers: Constants.STREAM_HEADERS, agent }, (res) => {
+      const req = https.get(url, { headers: Constants.STREAM_HEADERS, agent }, (res) => {
         if (res.statusCode !== 200) {
           reject(new Error(`Stream failed: ${res.statusCode} ${res.statusMessage}`));
           return;
         }
-        res.on('data', (chunk) => { downloaded += chunk.length; onProgress?.({ downloaded, total }); });
+        let timer;
+        let bytesSinceReset = 0;
+        const resetTimer = () => {
+          clearTimeout(timer);
+          bytesSinceReset = 0;
+          timer = setTimeout(() => {
+            req.destroy(new Error('Stream Timeout: Speed too slow (< 512KB in 5s)'));
+          }, 5000);
+        };
+        resetTimer();
+
+        res.on('data', (chunk) => {
+          bytesSinceReset += chunk.length;
+          if (bytesSinceReset > 1024 * 512) {
+            resetTimer();
+          }
+          downloaded += chunk.length;
+          onProgress?.({ downloaded, total });
+        });
         res.pipe(out);
-        out.on('finish', () => { onProgress?.({ downloaded, total, done: true }); resolve(); });
-      }).on('error', reject);
+        out.on('finish', () => {
+          clearTimeout(timer);
+          if (total && downloaded !== total) {
+            reject(new Error(`Stream truncated: got ${downloaded}, expected ${total}`));
+            return;
+          }
+          onProgress?.({ downloaded, total, done: true });
+          resolve();
+        });
+      });
+      req.on('error', reject);
     });
   }
 }
@@ -345,7 +405,10 @@ export async function convertAudioToFile({ format, destNoExt, targetExt, quality
 
     const args = buildAudioArgs({ sourceMime: format.mime_type, targetExt, quality, input: tmpPath });
     args.push(outPath);
-    await runFfmpeg(args);
+    await runFfmpeg(args, (stderr) => {
+      const match = stderr.match(/time=(\d{2}:\d{2}:\d{2}\.\d+)/);
+      if (match) onProgress?.({ ffmpegTime: match[1] });
+    });
     return outPath;
   } finally {
     fs.rmSync(tmpDir, { recursive: true, force: true });
@@ -384,8 +447,8 @@ export async function muxVideoToFile({ video, audio, destNoExt, targetExt, onPro
 
   try {
     await Promise.all([
-      downloadFormatToFile(video.format, tmpVideo, (p) => { vBytes = p.downloaded; emit(p.done); }),
-      downloadFormatToFile(audio.format, tmpAudio, (p) => { aBytes = p.downloaded; emit(p.done); }),
+      downloadFormatToFile(video.format, tmpVideo, (p) => { vBytes = p.downloaded; emit(); }),
+      downloadFormatToFile(audio.format, tmpAudio, (p) => { aBytes = p.downloaded; emit(); }),
     ]);
     emit(true);
 
@@ -412,7 +475,10 @@ export async function muxVideoToFile({ video, audio, destNoExt, targetExt, onPro
     }
 
     const args = ['-y', '-i', tmpVideo, '-i', tmpAudio, ...vArgs, ...aArgs, '-map', '0:v:0', '-map', '1:a:0', outPath];
-    await runFfmpeg(args);
+    await runFfmpeg(args, (stderr) => {
+      const match = stderr.match(/time=(\d{2}:\d{2}:\d{2}\.\d+)/);
+      if (match) onProgress?.({ ffmpegTime: match[1] });
+    });
     return outPath;
   } finally {
     fs.rmSync(tmpDir, { recursive: true, force: true });

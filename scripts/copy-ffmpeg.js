@@ -34,6 +34,17 @@ async function main() {
     console.warn('⚠ install.ps1 not found at:', installSrc);
   }
 
+  // Copy install.sh from site/public folder
+  const installShSrc = path.join(projectDir, 'site', 'public', 'install.sh');
+  const installShDest = path.join(distDir, 'install.sh');
+
+  if (fs.existsSync(installShSrc)) {
+    fs.cpSync(installShSrc, installShDest);
+    console.log(`✓ Copied install.sh: ${installShDest}`);
+  } else {
+    console.warn('⚠ install.sh not found at:', installShSrc);
+  }
+
   // Copy yt-dlp binary
   const ext = process.platform === 'win32' ? '.exe' : '';
   const ytdlpDest = path.join(distDir, `yt-dlp${ext}`);

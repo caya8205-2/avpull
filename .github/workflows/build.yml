@@ -12,8 +12,36 @@ permissions:
 
 jobs:
   build:
-    name: Build Binary
-    runs-on: windows-latest
+    name: Build (${{ matrix.os-label }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            os-label: Windows
+            artifact-name: avpull-windows
+            avpull-bin: avpull.exe
+            ffmpeg-bin: ffmpeg.exe
+            ytdlp-bin: yt-dlp.exe
+            shell: pwsh
+          - os: ubuntu-latest
+            os-label: Linux
+            artifact-name: avpull-linux
+            avpull-bin: avpull-linux
+            ffmpeg-bin: ffmpeg-linux
+            ytdlp-bin: yt-dlp-linux
+            shell: bash
+          - os: macos-latest
+            os-label: macOS
+            artifact-name: avpull-macos
+            avpull-bin: avpull-macos
+            ffmpeg-bin: ffmpeg-macos
+            ytdlp-bin: yt-dlp-macos
+            shell: bash
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: ${{ matrix.shell }}
     
     steps:
       - name: Checkout code
@@ -26,29 +54,26 @@ jobs:
       
       - name: Read version
         id: version
-        shell: pwsh
+        shell: bash
         run: |
-          $version = node -p "require('./package.json').version"
-          "version=$version" >> $env:GITHUB_OUTPUT
-          Write-Host "Version: $version"
+          version=$(node -p "require('./package.json').version")
+          echo "version=$version" >> $GITHUB_OUTPUT
+          echo "Version: $version"
       
       - name: Check if release exists
         id: check_release
-        shell: pwsh
+        shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          $version = "${{ steps.version.outputs.version }}"
-          
-          $response = gh api "repos/${{ github.repository }}/releases/tags/v$version" 2>&1
-          if ($LASTEXITCODE -eq 0) {
-            "exists=true" >> $env:GITHUB_OUTPUT
-            Write-Host "Release v$version already exists. Skipping."
-          } else {
-            "exists=false" >> $env:GITHUB_OUTPUT
-            Write-Host "Release v$version not found. Will create."
-          }
-          exit 0
+          version="${{ steps.version.outputs.version }}"
+          if gh api "repos/${{ github.repository }}/releases/tags/v$version" > /dev/null 2>&1; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+            echo "Release v$version already exists. Skipping."
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+            echo "Release v$version not found. Will create."
+          fi
       
       - name: Skip build if release exists
         if: steps.check_release.outputs.exists == 'true'
@@ -60,50 +85,106 @@ jobs:
       
       - name: Build binary
         if: steps.check_release.outputs.exists == 'false'
-        run: bun run build
+        run: bun build --compile --target=bun --outfile=dist/avpull ./bin/avpull.js
       
-      - name: Copy ffmpeg to dist
+      - name: Copy dependencies to dist
         if: steps.check_release.outputs.exists == 'false'
-        shell: pwsh
+        run: node scripts/copy-ffmpeg.js
+
+      - name: Rename artifacts for release
+        if: steps.check_release.outputs.exists == 'false'
+        shell: bash
         run: |
-          node scripts/copy-ffmpeg.js
-          if ($LASTEXITCODE -ne 0) {
-            Write-Error "Failed to copy ffmpeg"
-            exit 1
-          }
+          cd dist
+          # Rename avpull binary
+          if [ -f "avpull.exe" ]; then
+            echo "Windows binary, keeping as avpull.exe"
+          elif [ -f "avpull" ]; then
+            mv avpull "${{ matrix.avpull-bin }}"
+            echo "Renamed avpull -> ${{ matrix.avpull-bin }}"
+          fi
+
+          # Rename ffmpeg binary
+          if [ -f "ffmpeg.exe" ]; then
+            echo "Windows ffmpeg, keeping as ffmpeg.exe"
+          elif [ -f "ffmpeg" ]; then
+            mv ffmpeg "${{ matrix.ffmpeg-bin }}"
+            echo "Renamed ffmpeg -> ${{ matrix.ffmpeg-bin }}"
+          fi
+
+          # Rename yt-dlp binary
+          if [ -f "yt-dlp.exe" ]; then
+            echo "Windows yt-dlp, keeping as yt-dlp.exe"
+          elif [ -f "yt-dlp" ]; then
+            mv yt-dlp "${{ matrix.ytdlp-bin }}"
+            echo "Renamed yt-dlp -> ${{ matrix.ytdlp-bin }}"
+          fi
       
       - name: Upload build artifacts
         if: steps.check_release.outputs.exists == 'false'
         uses: actions/upload-artifact@v4
         with:
-          name: avpull-windows
-          path: |
-            dist/avpull.exe
-            dist/ffmpeg.exe
-            dist/yt-dlp.exe
-            dist/install.ps1
+          name: ${{ matrix.artifact-name }}
+          path: dist/
           retention-days: 30
-      
-      - name: Create GitHub Release
-        if: steps.check_release.outputs.exists == 'false'
-        shell: pwsh
+
+  release:
+    name: Create GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    # Only run if at least one build ran (release doesn't exist yet)
+    if: needs.build.result == 'success'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Read version
+        id: version
+        run: |
+          version=$(node -p "require('./package.json').version")
+          echo "version=$version" >> $GITHUB_OUTPUT
+
+      - name: Check if release exists
+        id: check_release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          $version = "${{ steps.version.outputs.version }}"
-          gh release create "v$version" `
-            dist/avpull.exe `
-            dist/ffmpeg.exe `
-            dist/yt-dlp.exe `
-            dist/install.ps1 `
-            --title "v$version" `
+          version="${{ steps.version.outputs.version }}"
+          if gh api "repos/${{ github.repository }}/releases/tags/v$version" > /dev/null 2>&1; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Download all artifacts
+        if: steps.check_release.outputs.exists == 'false'
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets/
+
+      - name: Collect release files
+        if: steps.check_release.outputs.exists == 'false'
+        run: |
+          mkdir -p release-upload
+          # Copy all binaries from each platform artifact folder
+          for dir in release-assets/*/; do
+            cp "$dir"* release-upload/ 2>/dev/null || true
+          done
+          echo "Release files:"
+          ls -la release-upload/
+
+      - name: Create GitHub Release
+        if: steps.check_release.outputs.exists == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          version="${{ steps.version.outputs.version }}"
+          gh release create "v$version" \
+            release-upload/* \
+            --title "v$version" \
             --generate-notes
-          
-          if ($LASTEXITCODE -ne 0) {
-            Write-Error "Failed to create release"
-            exit 1
-          }
-      
+
       - name: Trigger npm publish
         if: steps.check_release.outputs.exists == 'false'
         uses: peter-evans/repository-dispatch@v3
@@ -111,5 +192,3 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           event-type: release-created
           client-payload: '{"version": "v${{ steps.version.outputs.version }}"}'
-  
-

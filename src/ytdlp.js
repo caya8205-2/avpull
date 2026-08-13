@@ -156,16 +156,17 @@ export async function downloadWithYtDlp(opts) {
     let stderrBuf = '';
 
     proc.stderr.on('data', (chunk) => {
+      stderrBuf += chunk.toString();
+    });
+
+    proc.stdout.on('data', (chunk) => {
       const line = chunk.toString();
-      stderrBuf += line;
       // Parse yt-dlp progress: "[download]  45.2% of  12.34MiB ..."
       const match = line.match(/\[download\]\s+([\d.]+)%/);
       if (match && onProgress) {
         onProgress({ percent: parseFloat(match[1]) });
       }
     });
-
-    proc.stdout.on('data', () => {}); // drain
 
     proc.on('error', (err) => {
       if (err.code === 'ENOENT') {

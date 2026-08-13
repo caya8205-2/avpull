@@ -21,7 +21,7 @@ import { getMediaInfo, downloadWithYtDlp } from './ytdlp.js';
 import https from 'node:https';
 import { log, c, askLine, spinner } from './ui.js';
 
-const CURRENT_VERSION = '0.6.0';
+const CURRENT_VERSION = '0.7.0';
 const CONFIG_DIR = path.join(os.homedir(), '.avpull');
 const CONFIG_FILE = path.join(CONFIG_DIR, 'config.json');
 
@@ -89,10 +89,12 @@ async function checkForUpdates() {
     const isStandalone = execName === 'avpull.exe' || execName === 'avpull';
 
     if (isStandalone) {
-      log('INFO', c.cyan, '  Update command (Standalone/PowerShell):');
-      log('INFO', c.cyan, '  powershell -ExecutionPolicy Bypass -c "irm https://avpull.caya.web.id/install.ps1 | iex"');
+      if (process.platform === 'win32') {
+        log('INFO', c.cyan, '  powershell -ExecutionPolicy Bypass -c "irm https://avpull.caya.web.id/install.ps1 | iex"');
+      } else {
+        log('INFO', c.cyan, '  curl -fsSL https://avpull.caya.web.id/install.sh | bash');
+      }
     } else {
-      log('INFO', c.cyan, '  Update command (NPM):');
       log('INFO', c.cyan, '  npm i -g avpull@latest');
     }
     console.log();
@@ -118,7 +120,11 @@ async function readBatchFile(file) {
 }
 
 function makeProgressHandler(spin, label) {
-  return ({ downloaded, total, done }) => {
+  return ({ downloaded, total, done, ffmpegTime }) => {
+    if (ffmpegTime) {
+      spin.update(`${label} — converting (time: ${ffmpegTime})`);
+      return;
+    }
     if (done) {
       spin.update(`${label} — finalizing...`);
       return;
@@ -191,10 +197,13 @@ async function processOneYouTube(client, rawUrl, opts, format, index, total) {
       spin.stop(`${c.green('[OK]')} ${title} -> ${c.dim(outPath)}`);
       return;
     } catch (err) {
-      const retryMsg = attempt < maxRetries ? ` — retrying (${attempt}/${maxRetries - 1})` : '';
+      const retryMsg = attempt < maxRetries ? ` — retrying (${attempt}/${maxRetries})` : '';
       spin.stop(`${c.red('[ERR]')} ${label} — ${err.message}${retryMsg}`);
       if (attempt < maxRetries) {
         await new Promise(r => setTimeout(r, 1500 * attempt));
+      } else {
+        log('INFO', c.yellow, `Falling back to yt-dlp for ${rawUrl}...`);
+        return await processOneExternal(rawUrl, opts, format, index, total);
       }
     }
   }
@@ -269,46 +278,89 @@ Examples:
   avpull --show-default`);
 
   program.command('uninstall')
-    .description('Remove avpull from the system (AppData + PATH)')
+    .description('Remove avpull from the system')
     .action(async () => {
-      const appDir = path.join(process.env.LOCALAPPDATA || '', 'avpull');
-      const exeDir = path.dirname(process.execPath);
+      if (process.platform === 'win32') {
+        // ── Windows uninstall ──
+        const appDir = path.join(process.env.LOCALAPPDATA || '', 'avpull');
+        const exeDir = path.dirname(process.execPath);
 
-      if (path.resolve(exeDir) !== path.resolve(appDir)) {
-        log('ERR', c.red, 'avpull is not installed via the official installer.');
-        log('INFO', c.cyan, 'Try: npm uninstall -g avpull');
-        log('INFO', c.cyan, 'Or run "Get-Command avpull" to find the location and delete it manually.');
-        return;
+        if (path.resolve(exeDir) !== path.resolve(appDir)) {
+          log('ERR', c.red, 'avpull is not installed via the official installer.');
+          log('INFO', c.cyan, 'Try: npm uninstall -g avpull');
+          log('INFO', c.cyan, 'Or run "Get-Command avpull" to find the location and delete it manually.');
+          return;
+        }
+
+        log('WARN', c.yellow, 'This will remove avpull from your system.');
+        const answer = await askLine('Continue? [y/N] ');
+        if (!answer.toLowerCase().startsWith('y')) {
+          log('INFO', c.cyan, 'Cancelled.');
+          return;
+        }
+
+        try {
+          execSync(
+            `powershell -Command "$p=[Environment]::GetEnvironmentVariable('PATH','User');$p=($p -split ';'|?{$_ -ne '${appDir.replace(/'/g, "''")}'})-join';';[Environment]::SetEnvironmentVariable('PATH',$p,'User')"`,
+            { stdio: 'pipe' }
+          );
+          log('OK', c.green, 'Removed from PATH (user-level).');
+        } catch (err) {
+          log('WARN', c.yellow, `Could not update PATH: ${err.message}`);
+        }
+
+        const tmpScript = path.join(os.tmpdir(), 'avpull-cleanup.bat');
+        const batContent =
+          '@echo off\r\n' +
+          'ping 127.0.0.1 -n 3 > nul\r\n' +
+          'rmdir /s /q "' + appDir + '"\r\n' +
+          'del "' + tmpScript + '"\r\n';
+        fs.writeFileSync(tmpScript, batContent, 'utf-8');
+        execSync(`start /B "" "${tmpScript}"`, { stdio: 'ignore' });
+
+        log('OK', c.green, 'avpull will be removed after this window closes.');
+        log('INFO', c.cyan, 'Close this terminal, then the uninstaller will finish.');
+      } else {
+        // ── Linux / macOS uninstall ──
+        const appDir = path.join(os.homedir(), '.local', 'bin', 'avpull');
+        const exeDir = path.dirname(process.execPath);
+
+        if (path.resolve(exeDir) !== path.resolve(appDir)) {
+          log('ERR', c.red, 'avpull is not installed via the official installer.');
+          log('INFO', c.cyan, 'Try: npm uninstall -g avpull');
+          log('INFO', c.cyan, 'Or run "which avpull" to find the location and delete it manually.');
+          return;
+        }
+
+        log('WARN', c.yellow, 'This will remove avpull from your system.');
+        const answer = await askLine('Continue? [y/N] ');
+        if (!answer.toLowerCase().startsWith('y')) {
+          log('INFO', c.cyan, 'Cancelled.');
+          return;
+        }
+
+        // Remove install directory
+        try {
+          fs.rmSync(appDir, { recursive: true, force: true });
+          log('OK', c.green, `Removed ${appDir}`);
+        } catch (err) {
+          log('WARN', c.yellow, `Could not remove directory: ${err.message}`);
+        }
+
+        // Remove PATH entries from shell rc files
+        const rcFiles = ['.bashrc', '.zshrc', '.profile'].map(f => path.join(os.homedir(), f));
+        for (const rc of rcFiles) {
+          try {
+            if (!fs.existsSync(rc)) continue;
+            let content = fs.readFileSync(rc, 'utf-8');
+            const lines = content.split('\n');
+            const filtered = lines.filter(l => !l.includes(appDir) && l.trim() !== '# avpull');
+            fs.writeFileSync(rc, filtered.join('\n'));
+          } catch {}
+        }
+        log('OK', c.green, 'Removed from PATH (shell rc files).');
+        log('INFO', c.cyan, 'Open a new terminal for changes to take effect.');
       }
-
-      log('WARN', c.yellow, 'This will remove avpull from your system.');
-      const answer = await askLine('Continue? [y/N] ');
-      if (!answer.toLowerCase().startsWith('y')) {
-        log('INFO', c.cyan, 'Cancelled.');
-        return;
-      }
-
-      try {
-        execSync(
-          `powershell -Command "$p=[Environment]::GetEnvironmentVariable('PATH','User');$p=($p -split ';'|?{$_ -ne '${appDir.replace(/'/g, "''")}'})-join';';[Environment]::SetEnvironmentVariable('PATH',$p,'User')"`,
-          { stdio: 'pipe' }
-        );
-        log('OK', c.green, 'Removed from PATH (user-level).');
-      } catch (err) {
-        log('WARN', c.yellow, `Could not update PATH: ${err.message}`);
-      }
-
-      const tmpScript = path.join(os.tmpdir(), 'avpull-cleanup.bat');
-      const batContent =
-        '@echo off\r\n' +
-        'ping 127.0.0.1 -n 3 > nul\r\n' +
-        'rmdir /s /q "' + appDir + '"\r\n' +
-        'del "' + tmpScript + '"\r\n';
-      fs.writeFileSync(tmpScript, batContent, 'utf-8');
-      execSync(`start /B "" "${tmpScript}"`, { stdio: 'ignore' });
-
-      log('OK', c.green, 'avpull will be removed after this window closes.');
-      log('INFO', c.cyan, 'Close this terminal, then the uninstaller will finish.');
     });
 
   program

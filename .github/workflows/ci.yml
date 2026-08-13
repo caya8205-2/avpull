@@ -8,7 +8,20 @@ on:
 
 jobs:
   build:
-    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            shell: pwsh
+          - os: ubuntu-latest
+            shell: bash
+          - os: macos-latest
+            shell: bash
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: ${{ matrix.shell }}
     steps:
       - uses: actions/checkout@v4
 
@@ -29,12 +42,20 @@ jobs:
         run: node scripts/copy-ffmpeg.js
 
       - name: Verify artifacts
+        shell: bash
         run: |
-          if (!(Test-Path dist/avpull.exe)) { exit 1 }
-          if (!(Test-Path dist/ffmpeg.exe)) { exit 1 }
-          if (!(Test-Path dist/yt-dlp.exe)) { exit 1 }
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            test -f dist/avpull.exe || exit 1
+            test -f dist/ffmpeg.exe || exit 1
+            test -f dist/yt-dlp.exe || exit 1
+          else
+            test -f dist/avpull || exit 1
+            test -f dist/ffmpeg || exit 1
+            test -f dist/yt-dlp || exit 1
+          fi
+          echo "All artifacts verified."
 
       - uses: actions/upload-artifact@v4
         with:
-          name: avpull-windows
+          name: avpull-${{ runner.os }}
           path: dist/
