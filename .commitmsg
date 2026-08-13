@@ -1,6 +1,0 @@
-fix: landing page installer URL, favicon, and yt-dlp badge
-
-- Update installer URL in InstallTabs.tsx to avpull.caya.web.id
-- Add logo.webp as favicon
-- Update meta description and title for multi-platform support
-- Add yt-dlp badge to README
