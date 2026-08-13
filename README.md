@@ -15,7 +15,7 @@
 [![FFmpeg](https://img.shields.io/badge/FFmpeg-bundled-007808?style=flat&logo=ffmpeg&logoColor=white)](https://ffmpeg.org/)
 [![License](https://img.shields.io/badge/license-MIT-blue?style=flat)](LICENSE)
 
-> Download audio/video from YouTube and convert directly to your chosen format — mp3, wav, mp4, etc. No sketchy third-party downloader sites, no external binaries (yt-dlp, etc.), just Node.js.
+> Download audio/video from YouTube, Twitter/X, Instagram, Facebook, TikTok, Reddit, and more — convert directly to your chosen format (mp3, wav, mp4, etc.). No sketchy third-party downloader sites.
 
 **Perfect for:** soundboards, sound effects, BGM for editing, or saving video clips.
 
@@ -38,7 +38,7 @@ avpull "https://youtu.be/VIDEO_ID" -f mp3 -q 320
 ### Option 1: One-line Install (Windows)
 
 ```powershell
-powershell -ExecutionPolicy Bypass -c "irm https://caya8205-2.github.io/avpull/install.ps1 | iex"
+powershell -ExecutionPolicy Bypass -c "irm https://avpull.caya.web.id/install.ps1 | iex"
 ```
 
 This downloads and installs from the latest GitHub Release.
@@ -80,6 +80,28 @@ avpull "https://youtu.be/VIDEO_ID" -f mp3 -q 320
 
 # Video download
 avpull "https://youtu.be/VIDEO_ID" -f mp4 -q 1080
+```
+
+### Multi-Platform Download
+
+```powershell
+# Twitter/X
+avpull "https://x.com/user/status/123" -f mp4
+
+# Instagram (public reels work without cookies)
+avpull "https://www.instagram.com/reel/ABC/" -f mp4
+
+# Instagram/Facebook (login-gated content needs cookies)
+avpull "https://www.instagram.com/reel/ABC/" -f mp4 --cookies-from-browser chrome
+
+# Facebook
+avpull "https://www.facebook.com/watch/?v=123" -f mp4
+
+# TikTok
+avpull "https://www.tiktok.com/@user/video/123" -f mp3
+
+# Reddit
+avpull "https://reddit.com/r/sub/comments/xyz/" -f mp4
 ```
 
 ### Batch Download
@@ -124,6 +146,8 @@ avpull
 | `-o, --output <dir>` | Output folder. **Default:** `avpull` |
 | `-n, --name <name>` | Custom filename (without extension). Only applies when using a single URL. |
 | `-b, --batch <file>` | Read URL list from a text file (one URL per line). |
+| `--cookies-from-browser <browser>` | Use cookies from browser (`chrome`, `firefox`, `edge`, `brave`). Needed for login-gated content on Instagram/Facebook. |
+| `--cookies <file>` | Path to cookies.txt file (Netscape format). |
 | `-h, --help` | Display help information. |
 
 ---
@@ -132,9 +156,10 @@ avpull
 
 ### Architecture
 
-- **YouTube API:** Uses [`youtubei.js`](https://github.com/LuanRT/YouTube.js) (not yt-dlp) — pure JavaScript, no external binary dependencies.
+- **YouTube:** Uses [`youtubei.js`](https://github.com/LuanRT/YouTube.js) — pure JavaScript YouTube client, no external dependencies.
+- **Other Platforms:** Uses [yt-dlp](https://github.com/yt-dlp/yt-dlp) (bundled) for Twitter/X, Instagram, Facebook, TikTok, Reddit, and 1000+ other sites.
 - **Media Processing:** FFmpeg bundled via `ffmpeg-static` — no manual installation required.
-- **Video Quality:** Uses YouTube's progressive streams (video+audio combined), typically maxing out at **720p-1080p**. For true 4K (requires muxing separate adaptive streams), let me know.
+- **Video Quality:** YouTube uses adaptive streams (video+audio muxed with ffmpeg), typically up to **1080p**. Other platforms use best available quality.
 - **Audio Conversion:** Fast remux (`-c copy`) when source codec is compatible; otherwise re-encodes.
 
 ### Tech Stack
@@ -142,6 +167,7 @@ avpull
 - **Runtime:** Node.js 18+ / Bun 1.0+
 - **CLI Framework:** Commander.js
 - **YouTube Client:** youtubei.js
+- **Multi-Platform Downloader:** yt-dlp (bundled)
 - **Media Processing:** FFmpeg (bundled)
 - **Colors:** picocolors
 
@@ -169,7 +195,7 @@ bun run build
 
 ```powershell
 bun run release
-# Builds binary + copies ffmpeg to dist/
+# Builds binary + copies ffmpeg & yt-dlp to dist/
 ```
 
 ---

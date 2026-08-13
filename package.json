@@ -1,6 +1,6 @@
 {
   "name": "avpull",
-  "version": "0.4.1",
+  "version": "0.5.0",
   "description": "Download audio/video from YouTube, convert directly to your chosen format (mp3, wav, mp4, etc.)",
   "type": "module",
   "bin": {
@@ -28,7 +28,7 @@
   "bugs": {
     "url": "https://github.com/caya8205-2/avpull/issues"
   },
-  "homepage": "https://caya8205-2.github.io/avpull",
+  "homepage": "https://avpull.caya.web.id",
   "engines": {
     "node": ">=18"
   },
@@ -49,6 +49,7 @@
     "commander": "^15.0.0",
     "ffmpeg-static": "^5.3.0",
     "picocolors": "^1.1.1",
+    "youtube-dl-exec": "^3.1.12",
     "youtubei.js": "^17.2.0"
   }
 }

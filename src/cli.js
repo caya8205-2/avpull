@@ -16,10 +16,12 @@ import {
   VIDEO_FORMATS,
   SUPPORTED_FORMATS
 } from './lib.js';
+import { isYouTubeUrl } from './platform.js';
+import { getMediaInfo, downloadWithYtDlp } from './ytdlp.js';
 import https from 'node:https';
 import { log, c, askLine, spinner } from './ui.js';
 
-const CURRENT_VERSION = '0.4.1';
+const CURRENT_VERSION = '0.5.0';
 const CONFIG_DIR = path.join(os.homedir(), '.avpull');
 const CONFIG_FILE = path.join(CONFIG_DIR, 'config.json');
 
@@ -82,7 +84,7 @@ async function checkForUpdates() {
     console.log();
     log('UPDATE', c.yellow, `v${latest.join('.')} is available (current: v${current.join('.')})`);
     log('INFO', c.cyan, '  npm:    npm i -g avpull@latest');
-    log('INFO', c.cyan, '  script: powershell -ExecutionPolicy Bypass -c "irm https://caya8205-2.github.io/avpull/install.ps1 | iex"');
+    log('INFO', c.cyan, '  script: powershell -ExecutionPolicy Bypass -c "irm https://avpull.caya.web.id/install.ps1 | iex"');
     console.log();
   } catch {}
 }
@@ -121,11 +123,11 @@ function makeProgressHandler(spin, label) {
   };
 }
 
-async function processOne(client, rawUrl, opts, format, index, total) {
+async function processOneYouTube(client, rawUrl, opts, format, index, total) {
   const label = total > 1 ? `[${index + 1}/${total}] ${rawUrl}` : rawUrl;
   const id = extractVideoId(rawUrl);
   if (!id) {
-    log('ERR', c.red, `Unrecognized URL, skipping: ${rawUrl}`);
+    log('ERR', c.red, `Unrecognized YouTube URL, skipping: ${rawUrl}`);
     return;
   }
 
@@ -188,6 +190,51 @@ async function processOne(client, rawUrl, opts, format, index, total) {
   }
 }
 
+async function processOneExternal(rawUrl, opts, format, index, total) {
+  const label = total > 1 ? `[${index + 1}/${total}] ${rawUrl}` : rawUrl;
+  const maxRetries = 2;
+
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    const spin = spinner(`${label} — fetching info...`);
+    try {
+      const info = await getMediaInfo(rawUrl, {
+        cookies: opts.cookies,
+        cookiesBrowser: opts.cookiesBrowser
+      });
+
+      const title = info.title || 'untitled';
+      const useCustomName = opts.name && total === 1;
+      const baseName = useCustomName ? opts.name : safeFilename(title);
+      const destNoExt = path.join(opts.output, baseName);
+      const outPath = uniquify(destNoExt, format);
+      const outNoExt = outPath.slice(0, -(format.length + 1));
+
+      spin.update(`${label} — downloading...`);
+
+      const finalPath = await downloadWithYtDlp({
+        url: rawUrl,
+        destNoExt: outNoExt,
+        targetExt: format,
+        quality: opts.quality,
+        cookies: opts.cookies,
+        cookiesBrowser: opts.cookiesBrowser,
+        onProgress: ({ percent }) => {
+          spin.update(`${label} — download ${percent.toFixed(1)}%`);
+        }
+      });
+
+      spin.stop(`${c.green('[OK]')} ${title} -> ${c.dim(finalPath)}`);
+      return;
+    } catch (err) {
+      const retryMsg = attempt < maxRetries ? ` — retrying (${attempt}/${maxRetries - 1})` : '';
+      spin.stop(`${c.red('[ERR]')} ${label} — ${err.message}${retryMsg}`);
+      if (attempt < maxRetries) {
+        await new Promise(r => setTimeout(r, 1500 * attempt));
+      }
+    }
+  }
+}
+
 export async function runCli(argv) {
   await checkForUpdates();
 
@@ -202,6 +249,9 @@ Examples:
   avpull "https://youtu.be/VIDEO_ID"
   avpull "https://youtu.be/VIDEO_ID" -f mp3 -q 320
   avpull "https://youtu.be/VIDEO_ID" -f mp4 -q 1080 -o ./videos
+  avpull "https://x.com/user/status/123" -f mp4
+  avpull "https://www.tiktok.com/@user/video/123" -f mp3
+  avpull "https://www.instagram.com/reel/ABC/" --cookies-from-browser chrome
   avpull -b urls.txt -f wav
   avpull "https://youtu.be/VIDEO_ID" -n "my song"
   avpull -s ~/Music/avpull
@@ -259,6 +309,8 @@ Examples:
     .option('-n, --name <name>', 'custom filename (no extension, only works with 1 URL)')
     .option('-q, --quality <n>', 'audio: bitrate kbps (128, 192, 256, 320, etc). video: resolution (240, 360, 480, 720, 1080) or best')
     .option('-b, --batch <file>', 'read URLs from a text file (one URL per line)')
+    .option('--cookies-from-browser <browser>', 'use cookies from browser (chrome, firefox, edge, brave) — needed for Instagram/Facebook')
+    .option('--cookies <file>', 'path to cookies.txt file (Netscape format)')
     .action(async (urls, opts) => {
       if (opts.showDefault) {
         log('OK', c.cyan, getDefaultOutput());
@@ -309,9 +361,15 @@ Examples:
         log('WARN', c.yellow, '--name ignored because there is more than 1 URL, using video titles as filenames.');
       }
 
-      const client = await getClient();
+      // Lazy-init YouTube client only if needed
+      let client = null;
       for (let i = 0; i < list.length; i++) {
-        await processOne(client, list[i], opts, format, i, list.length);
+        if (isYouTubeUrl(list[i])) {
+          if (!client) client = await getClient();
+          await processOneYouTube(client, list[i], opts, format, i, list.length);
+        } else {
+          await processOneExternal(list[i], opts, format, i, list.length);
+        }
       }
     });
 

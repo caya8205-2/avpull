@@ -80,6 +80,7 @@ jobs:
           path: |
             dist/avpull.exe
             dist/ffmpeg.exe
+            dist/yt-dlp.exe
             dist/install.ps1
           retention-days: 30
       
@@ -93,6 +94,7 @@ jobs:
           gh release create "v$version" `
             dist/avpull.exe `
             dist/ffmpeg.exe `
+            dist/yt-dlp.exe `
             dist/install.ps1 `
             --title "v$version" `
             --generate-notes

@@ -8,6 +8,7 @@ param(
 $AppDir = "$env:LOCALAPPDATA\avpull"
 $BinPath = Join-Path $AppDir 'avpull.exe'
 $FfmpegPath = Join-Path $AppDir 'ffmpeg.exe'
+$YtdlpPath = Join-Path $AppDir 'yt-dlp.exe'
 
 function Checkmark {
   param([string]$Text)
@@ -80,6 +81,13 @@ if ($localExe -and (Test-Path $localExe)) {
   } else {
     Write-Host "  WARNING: ffmpeg.exe not found, must be in PATH" -ForegroundColor Yellow
   }
+  $localYtdlp = Join-Path $scriptPath 'yt-dlp.exe'
+  if (Test-Path $localYtdlp) {
+    Copy-Item -LiteralPath $localYtdlp -Destination $YtdlpPath -Force
+    Checkmark "Copied yt-dlp.exe"
+  } else {
+    Write-Host "  WARNING: yt-dlp.exe not found, non-YouTube downloads may not work" -ForegroundColor Yellow
+  }
 } else {
   Write-Host "Fetching release info from GitHub ..." -ForegroundColor Cyan
   
@@ -96,6 +104,7 @@ if ($localExe -and (Test-Path $localExe)) {
     Checkmark "Found release $($release.tag_name)"
     Dl "$baseUrl/avpull.exe" $BinPath
     Dl "$baseUrl/ffmpeg.exe" $FfmpegPath
+    Dl "$baseUrl/yt-dlp.exe" $YtdlpPath
   } catch {
     Write-Host ""
     Write-Host "ERROR: Failed to fetch release from GitHub." -ForegroundColor Red

@@ -73,6 +73,10 @@ if (!(Test-Path "dist/ffmpeg.exe")) {
     Write-Host "❌ ffmpeg.exe not found in dist/" -ForegroundColor Red
     exit 1
 }
+if (!(Test-Path "dist/yt-dlp.exe")) {
+    Write-Host "❌ yt-dlp.exe not found in dist/" -ForegroundColor Red
+    exit 1
+}
 
 Write-Host ""
 Write-Host "✨ Build successful!" -ForegroundColor Green

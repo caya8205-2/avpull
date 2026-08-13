@@ -33,6 +33,24 @@ async function main() {
   } else {
     console.warn('⚠ install.ps1 not found at:', installSrc);
   }
+
+  // Copy yt-dlp binary
+  try {
+    const { createRequire } = await import('node:module');
+    const require = createRequire(import.meta.url);
+    const pkgDir = path.dirname(require.resolve('youtube-dl-exec/package.json'));
+    const ext = process.platform === 'win32' ? '.exe' : '';
+    const ytdlpSrc = path.join(pkgDir, 'bin', `yt-dlp${ext}`);
+    if (fs.existsSync(ytdlpSrc)) {
+      const ytdlpDest = path.join(distDir, `yt-dlp${ext}`);
+      fs.cpSync(ytdlpSrc, ytdlpDest);
+      console.log(`✓ Copied yt-dlp: ${ytdlpDest}`);
+    } else {
+      console.warn('⚠ yt-dlp binary not found at:', ytdlpSrc);
+    }
+  } catch (err) {
+    console.warn('⚠ Could not copy yt-dlp:', err.message);
+  }
 }
 
 main().catch(console.error);

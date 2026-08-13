@@ -7,7 +7,7 @@ import path from 'node:path';
 import { log, c } from './ui.js';
 
 let _ffmpegCached = null;
-async function resolveFfmpeg() {
+export async function resolveFfmpeg() {
   if (_ffmpegCached) return _ffmpegCached;
   try {
     const { default: ffmpegStatic } = await import('ffmpeg-static');
