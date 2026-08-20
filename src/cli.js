@@ -21,7 +21,7 @@ import { getMediaInfo, downloadWithYtDlp } from './ytdlp.js';
 import https from 'node:https';
 import { log, c, askLine, spinner } from './ui.js';
 
-const CURRENT_VERSION = '0.8.0';
+const CURRENT_VERSION = '0.8.1';
 const CONFIG_DIR = path.join(os.homedir(), '.avpull');
 const CONFIG_FILE = path.join(CONFIG_DIR, 'config.json');
 
@@ -187,6 +187,7 @@ async function processOneYouTube(client, rawUrl, opts, format, index, total) {
       } else {
         await convertAudioToFile({
           format: result.audio.format,
+          session: result.audio.session,
           destNoExt: outNoExt,
           targetExt: format,
           quality: opts.quality || 192,

@@ -86,10 +86,6 @@ export async function getMediaInfo(url, { cookies, cookiesBrowser } = {}) {
   await resolveYtDlp();
   const args = ['--dump-single-json', '--no-playlist'];
 
-  if (isYouTubeUrl(url)) {
-    args.push('--extractor-args', 'youtube:player_client=android');
-  }
-
   if (cookiesBrowser) args.push('--cookies-from-browser', cookiesBrowser);
   if (cookies) args.push('--cookies', cookies);
 
@@ -118,10 +114,6 @@ export async function downloadWithYtDlp(opts) {
   fs.mkdirSync(path.dirname(destNoExt), { recursive: true });
 
   const args = ['--no-playlist', '--newline'];
-
-  if (isYouTubeUrl(url)) {
-    args.push('--extractor-args', 'youtube:player_client=android');
-  }
 
   // Tell yt-dlp where ffmpeg is
   args.push('--ffmpeg-location', path.dirname(ffmpegPath));

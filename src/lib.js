@@ -39,8 +39,8 @@ export const AUDIO_FORMATS = ['mp3', 'wav', 'm4a', 'opus', 'flac', 'aac', 'ogg']
 export const VIDEO_FORMATS = ['mp4', 'webm', 'mkv'];
 export const SUPPORTED_FORMATS = [...AUDIO_FORMATS, ...VIDEO_FORMATS];
 
-// ANDROID_VR works most reliably, use it first.
-const YOUTUBEI_CLIENTS = ['ANDROID_VR', 'IOS', 'TV_SIMPLY', 'MWEB', 'ANDROID', 'WEB'];
+const AUDIO_CLIENTS = ['ANDROID_VR', 'ANDROID', 'IOS', 'TV_SIMPLY', 'MWEB', 'WEB'];
+const VIDEO_CLIENTS = ['TV_SIMPLY', 'MWEB', 'WEB', 'ANDROID', 'IOS'];
 
 let clientPromise = null;
 
@@ -134,58 +134,48 @@ function isLimitedIosStream(url) {
   }
 }
 
-/** Quick range probe to confirm a deciphered URL is actually fetchable before committing to it. */
-function validateStreamUrl(url, retries = 2) {
-  return new Promise((resolve, reject) => {
-    const doProbe = (attempt) => {
-      const headers = { ...Constants.STREAM_HEADERS, Range: 'bytes=0-1048575' };
-      const req = https.get(url, { headers }, (res) => {
-        res.destroy();
-        if (res.statusCode === 200 || res.statusCode === 206) {
-          resolve();
-        } else {
-          reject(new Error(`URL not playable: ${res.statusCode} ${res.statusMessage}`));
-        }
-      });
-      req.on('error', (err) => {
-        if (attempt < retries) {
-          setTimeout(() => doProbe(attempt + 1), 500 * attempt);
-        } else {
-          reject(err);
-        }
-      });
-      req.on('socket', (socket) => {
-        socket.on('error', () => {});
-      });
-    };
-    doProbe(1);
-  });
-}
-
 /**
  * Try each YouTube client in turn until one returns a format whose URL can
- * be deciphered *and* is actually fetchable. Returns { info, format, client }.
+ * be deciphered. Returns { info, format, client }.
  */
 async function chooseValidatedFormat(client, videoId, chooseOpts) {
+  const isVideo = chooseOpts.type === 'video';
+  const clientList = isVideo ? VIDEO_CLIENTS : AUDIO_CLIENTS;
   const failures = [];
-  for (const clientType of YOUTUBEI_CLIENTS) {
+
+  for (const clientType of clientList) {
     try {
       const info = await client.getBasicInfo(videoId, { client: clientType });
       let format;
       try {
         format = info.chooseFormat(chooseOpts);
       } catch {
-        if (chooseOpts.quality !== 'best') {
-          format = info.chooseFormat({ ...chooseOpts, quality: 'best' });
+        const adaptive = (info.streaming_data?.adaptive_formats || []).filter(
+          (f) => (isVideo ? f.has_video && !f.has_audio : f.has_audio && !f.has_video)
+        );
+        if (adaptive.length > 0) {
+          if (isVideo && chooseOpts.quality && chooseOpts.quality !== 'best') {
+            const targetHeight = parseInt(chooseOpts.quality);
+            const sorted = adaptive.filter((f) => f.height).sort((a, b) => b.height - a.height);
+            format = sorted.find((f) => f.height <= targetHeight) || sorted[sorted.length - 1];
+          } else {
+            format = adaptive[0];
+          }
         } else {
           throw new Error('No matching formats found');
         }
       }
-      const url = await format.decipher(info.actions.session.player);
-      if (!url) throw new Error('No playable URL returned');
-      if (isLimitedIosStream(url)) throw new Error('Skipping limited iOS stream URL');
-      await validateStreamUrl(url);
-      format.url = url;
+
+      if (!format) throw new Error('Format could not be resolved');
+      let decipheredUrl = await info.actions.session.player.decipher(format.url || format.signature_cipher || format.cipher);
+      if (!decipheredUrl) throw new Error('No playable URL returned after decipher');
+      if (isLimitedIosStream(decipheredUrl)) throw new Error('Skipping limited iOS stream URL');
+
+      if (info.cpn && !decipheredUrl.includes('&cpn=')) {
+        decipheredUrl += `&cpn=${info.cpn}`;
+      }
+
+      format.url = decipheredUrl;
       return { info, format, client: clientType };
     } catch (err) {
       log('WARN', c.yellow, `[${clientType}] ${err.message}`);
@@ -197,18 +187,16 @@ async function chooseValidatedFormat(client, videoId, chooseOpts) {
 
 /**
  * Fetch video info + the format(s) needed for the requested output.
- *
- * YouTube almost never serves a real muxed "video+audio" stream above 360p
- * anymore, so for video we always grab the best-matching video-only
- * (adaptive) format and the best audio-only format separately, then mux
- * them with ffmpeg. Each format is resolved through a client fallback list
- * (mirrors Noctune's production resolver) since the default WEB client
- * frequently can't decipher a URL without a po_token.
  */
 export async function fetchStream(client, videoId, { formatKind, quality }) {
   if (formatKind === 'audio') {
-    const { info, format } = await chooseValidatedFormat(client, videoId, { type: 'audio', quality: 'best' });
-    return { info, kind: 'audio', audio: { format } };
+    let audioResult;
+    try {
+      audioResult = await chooseValidatedFormat(client, videoId, { type: 'audio', quality: 'best', format: 'opus' });
+    } catch {
+      audioResult = await chooseValidatedFormat(client, videoId, { type: 'audio', quality: 'best' });
+    }
+    return { info: audioResult.info, kind: 'audio', audio: { format: audioResult.format, session: audioResult.info.actions.session } };
   }
 
   const { info, format: videoFormat } = await chooseValidatedFormat(client, videoId, {
@@ -216,13 +204,19 @@ export async function fetchStream(client, videoId, { formatKind, quality }) {
     quality: normalizeVideoQuality(quality),
     format: 'any'
   });
-  const { format: audioFormat } = await chooseValidatedFormat(client, videoId, { type: 'audio', quality: 'best' });
+  
+  let audioResult;
+  try {
+    audioResult = await chooseValidatedFormat(client, videoId, { type: 'audio', quality: 'best', format: 'opus' });
+  } catch {
+    audioResult = await chooseValidatedFormat(client, videoId, { type: 'audio', quality: 'best' });
+  }
 
   return {
     info,
     kind: 'video',
-    video: { format: videoFormat },
-    audio: { format: audioFormat }
+    video: { format: videoFormat, session: info.actions.session },
+    audio: { format: audioResult.format, session: audioResult.info.actions.session }
   };
 }
 
@@ -236,135 +230,62 @@ async function runFfmpeg(args, onStderr) {
   });
 }
 
-// ── HTTP agent (keep-alive) ──────────────────────────────
-let _agent;
-function getAgent() {
-  if (!_agent) _agent = new https.Agent({ keepAlive: true, maxSockets: 20 });
-  return _agent;
-}
-
-// ── Parallel chunked download ────────────────────────────
-const CHUNK_COUNT = 6;
-const CHUNK_MIN_SIZE = 1024 * 1024;
-
-async function downloadFormatToFile(format, tmpPath, onProgress) {
+// ── Stream Download Pipeline ────────────────────────────
+async function downloadFormatToFile(format, tmpPath, onProgress, session) {
   const url = format.url;
   const total = format.content_length ? Number(format.content_length) : null;
-  const agent = getAgent();
+  const fetchFn = session?.http?.fetch_function || globalThis.fetch;
+  const out = fs.createWriteStream(tmpPath);
 
-  const MAX_BUFFER = 2147483647;
-  if (total && total >= CHUNK_MIN_SIZE && total <= MAX_BUFFER) {
-    const chunkSize = Math.ceil(total / CHUNK_COUNT);
-    const ranges = [];
-    for (let i = 0; i < CHUNK_COUNT; i++) {
-      const start = i * chunkSize;
-      const end = Math.min(start + chunkSize - 1, total - 1);
-      if (start > end) break;
-      ranges.push({ start, end });
+  const CHUNK_BLOCK = 10 * 1024 * 1024; // 10MB ranges
+  let downloaded = 0;
+
+  if (total && total > CHUNK_BLOCK) {
+    while (downloaded < total) {
+      const end = Math.min(downloaded + CHUNK_BLOCK - 1, total - 1);
+      const res = await fetchFn(url, {
+        method: 'GET',
+        headers: {
+          ...Constants.STREAM_HEADERS,
+          Range: `bytes=${downloaded}-${end}`,
+        },
+      });
+
+      if (!res.ok && res.status !== 206 && res.status !== 200) {
+        throw new Error(`Stream chunk (${downloaded}-${end}) failed: ${res.status} ${res.statusText}`);
+      }
+
+      for await (const chunk of res.body) {
+        out.write(chunk);
+        downloaded += chunk.length;
+        onProgress?.({ downloaded, total });
+      }
+    }
+  } else {
+    const res = await fetchFn(url, {
+      method: 'GET',
+      headers: {
+        ...Constants.STREAM_HEADERS,
+        Range: 'bytes=0-',
+      },
+    });
+
+    if (!res.ok && res.status !== 206 && res.status !== 200) {
+      throw new Error(`Stream failed: ${res.status} ${res.statusText}`);
     }
 
-    fs.writeFileSync(tmpPath, Buffer.alloc(total));
-
-    let downloaded = 0;
-    await Promise.all(ranges.map(({ start, end }) =>
-      new Promise((resolve, reject) => {
-        const headers = { ...Constants.STREAM_HEADERS, Range: `bytes=${start}-${end}` };
-        const req = https.get(url, { headers, agent }, (res) => {
-          if (res.statusCode !== 206) {
-            reject(new Error(`Chunk (${start}-${end}) failed: ${res.statusCode} ${res.statusMessage}`));
-            return;
-          }
-          let timer;
-          let bytesSinceReset = 0;
-          const resetTimer = () => {
-            clearTimeout(timer);
-            bytesSinceReset = 0;
-            timer = setTimeout(() => {
-              req.destroy(new Error(`Chunk (${start}-${end}) Timeout: Speed too slow (< 512KB in 5s)`));
-            }, 5000);
-          };
-          resetTimer();
-
-          const parts = [];
-          res.on('data', (d) => {
-            bytesSinceReset += d.length;
-            if (bytesSinceReset > 1024 * 512) {
-              resetTimer();
-            }
-            parts.push(d);
-          });
-          res.on('end', () => {
-            clearTimeout(timer);
-            const buf = Buffer.concat(parts);
-            const expected = end - start + 1;
-            if (buf.length !== expected) {
-              reject(new Error(`Chunk (${start}-${end}) truncated: got ${buf.length}, expected ${expected}`));
-              return;
-            }
-            try {
-              const fd = fs.openSync(tmpPath, 'r+');
-              fs.writeSync(fd, buf, 0, buf.length, start);
-              fs.closeSync(fd);
-            } catch (err) {
-              // tmp file might be deleted if another chunk rejected earlier
-              reject(err);
-              return;
-            }
-            downloaded += buf.length;
-            onProgress?.({ downloaded, total });
-            resolve();
-          });
-          res.on('error', (err) => {
-            clearTimeout(timer);
-            reject(err);
-          });
-        });
-        req.on('error', reject);
-      })
-    ));
-    onProgress?.({ downloaded: total, total, done: true });
-  } else {
-    let downloaded = 0;
-    return new Promise((resolve, reject) => {
-      const out = fs.createWriteStream(tmpPath);
-      const req = https.get(url, { headers: Constants.STREAM_HEADERS, agent }, (res) => {
-        if (res.statusCode !== 200) {
-          reject(new Error(`Stream failed: ${res.statusCode} ${res.statusMessage}`));
-          return;
-        }
-        let timer;
-        let bytesSinceReset = 0;
-        const resetTimer = () => {
-          clearTimeout(timer);
-          bytesSinceReset = 0;
-          timer = setTimeout(() => {
-            req.destroy(new Error('Stream Timeout: Speed too slow (< 512KB in 5s)'));
-          }, 5000);
-        };
-        resetTimer();
-
-        res.on('data', (chunk) => {
-          bytesSinceReset += chunk.length;
-          if (bytesSinceReset > 1024 * 512) {
-            resetTimer();
-          }
-          downloaded += chunk.length;
-          onProgress?.({ downloaded, total });
-        });
-        res.pipe(out);
-        out.on('finish', () => {
-          clearTimeout(timer);
-          if (total && downloaded !== total) {
-            reject(new Error(`Stream truncated: got ${downloaded}, expected ${total}`));
-            return;
-          }
-          onProgress?.({ downloaded, total, done: true });
-          resolve();
-        });
-      });
-      req.on('error', reject);
-    });
+    for await (const chunk of res.body) {
+      out.write(chunk);
+      downloaded += chunk.length;
+      onProgress?.({ downloaded, total: total || downloaded });
+    }
   }
+
+  await new Promise((resolve, reject) => {
+    out.end((err) => (err ? reject(err) : resolve()));
+  });
+
+  onProgress?.({ downloaded: total || downloaded, total: total || downloaded, done: true });
 }
 
 /** Guess audio ffmpeg codec args to go from a source mime_type to a target extension. */
@@ -411,7 +332,7 @@ function buildAudioArgs({ sourceMime, targetExt, quality, input }) {
  * encode it with ffmpeg. `onProgress({ downloaded, total })` fires periodically
  * as bytes stream in.
  */
-export async function convertAudioToFile({ format, destNoExt, targetExt, quality, onProgress }) {
+export async function convertAudioToFile({ format, session, destNoExt, targetExt, quality, onProgress }) {
   const outPath = `${destNoExt}.${targetExt}`;
   fs.mkdirSync(path.dirname(outPath), { recursive: true });
 
@@ -419,7 +340,7 @@ export async function convertAudioToFile({ format, destNoExt, targetExt, quality
   const tmpPath = path.join(tmpDir, 'raw.tmp');
 
   try {
-    await downloadFormatToFile(format, tmpPath, onProgress);
+    await downloadFormatToFile(format, tmpPath, onProgress, session);
 
     const args = buildAudioArgs({ sourceMime: format.mime_type, targetExt, quality, input: tmpPath });
     args.push(outPath);
@@ -465,8 +386,8 @@ export async function muxVideoToFile({ video, audio, destNoExt, targetExt, onPro
 
   try {
     await Promise.all([
-      downloadFormatToFile(video.format, tmpVideo, (p) => { vBytes = p.downloaded; emit(); }),
-      downloadFormatToFile(audio.format, tmpAudio, (p) => { aBytes = p.downloaded; emit(); }),
+      downloadFormatToFile(video.format, tmpVideo, (p) => { vBytes = p.downloaded; emit(); }, video.session),
+      downloadFormatToFile(audio.format, tmpAudio, (p) => { aBytes = p.downloaded; emit(); }, audio.session),
     ]);
     emit(true);
 
