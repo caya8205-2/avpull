@@ -3,6 +3,7 @@ import { createRequire } from 'node:module';
 import fs from 'node:fs';
 import path from 'node:path';
 import { resolveFfmpeg, isVideoFormat, isAudioFormat, safeFilename, formatBytes } from './lib.js';
+import { isYouTubeUrl } from './platform.js';
 import { log, c } from './ui.js';
 
 let _ytdlpCached = null;
@@ -85,6 +86,10 @@ export async function getMediaInfo(url, { cookies, cookiesBrowser } = {}) {
   await resolveYtDlp();
   const args = ['--dump-single-json', '--no-playlist'];
 
+  if (isYouTubeUrl(url)) {
+    args.push('--extractor-args', 'youtube:player_client=android');
+  }
+
   if (cookiesBrowser) args.push('--cookies-from-browser', cookiesBrowser);
   if (cookies) args.push('--cookies', cookies);
 
@@ -106,13 +111,17 @@ export async function getMediaInfo(url, { cookies, cookiesBrowser } = {}) {
  * @param {function} [opts.onProgress] - Progress callback ({ percent })
  */
 export async function downloadWithYtDlp(opts) {
-  const { url, destNoExt, targetExt, quality, cookies, cookiesBrowser, onProgress } = opts;
+  const { url, destNoExt, targetExt, quality, cookies, cookiesBrowser, forceMp4Stream, onProgress } = opts;
   const ytdlp = await resolveYtDlp();
   const ffmpegPath = await resolveFfmpeg();
 
   fs.mkdirSync(path.dirname(destNoExt), { recursive: true });
 
   const args = ['--no-playlist', '--newline'];
+
+  if (isYouTubeUrl(url)) {
+    args.push('--extractor-args', 'youtube:player_client=android');
+  }
 
   // Tell yt-dlp where ffmpeg is
   args.push('--ffmpeg-location', path.dirname(ffmpegPath));
@@ -125,7 +134,25 @@ export async function downloadWithYtDlp(opts) {
   const isVideo = isVideoFormat(targetExt);
   const isAudio = isAudioFormat(targetExt);
 
-  if (isAudio) {
+  if (forceMp4Stream) {
+    // Progressive MP4 stream format (format 22/18 / best mp4) - YouTube CDN never blocks this
+    if (isAudio) {
+      args.push('-f', '18/best[ext=mp4]/best');
+      args.push('-x', '--audio-format', targetExt);
+      const q = Number(quality);
+      if (Number.isFinite(q) && q > 0) {
+        args.push('--audio-quality', `${q}k`);
+      }
+    } else {
+      const q = quality || 'best';
+      if (q === 'best') {
+        args.push('-f', 'best[ext=mp4]/22/18/best');
+      } else {
+        args.push('-f', `best[ext=mp4][height<=${q}]/22[height<=${q}]/18/best`);
+      }
+      args.push('--merge-output-format', targetExt);
+    }
+  } else if (isAudio) {
     args.push('-x', '--audio-format', targetExt);
     const q = Number(quality);
     if (Number.isFinite(q) && q > 0) {

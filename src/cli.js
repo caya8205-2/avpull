@@ -21,7 +21,7 @@ import { getMediaInfo, downloadWithYtDlp } from './ytdlp.js';
 import https from 'node:https';
 import { log, c, askLine, spinner } from './ui.js';
 
-const CURRENT_VERSION = '0.7.0';
+const CURRENT_VERSION = '0.8.0';
 const CONFIG_DIR = path.join(os.homedir(), '.avpull');
 const CONFIG_FILE = path.join(CONFIG_DIR, 'config.json');
 
@@ -212,6 +212,7 @@ async function processOneYouTube(client, rawUrl, opts, format, index, total) {
 async function processOneExternal(rawUrl, opts, format, index, total) {
   const label = total > 1 ? `[${index + 1}/${total}] ${rawUrl}` : rawUrl;
   const maxRetries = 2;
+  let lastErr = null;
 
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     const spin = spinner(`${label} — fetching info...`);
@@ -245,12 +246,39 @@ async function processOneExternal(rawUrl, opts, format, index, total) {
       spin.stop(`${c.green('[OK]')} ${title} -> ${c.dim(finalPath)}`);
       return;
     } catch (err) {
+      lastErr = err;
       const retryMsg = attempt < maxRetries ? ` — retrying (${attempt}/${maxRetries - 1})` : '';
       spin.stop(`${c.red('[ERR]')} ${label} — ${err.message}${retryMsg}`);
       if (attempt < maxRetries) {
         await new Promise(r => setTimeout(r, 1500 * attempt));
       }
     }
+  }
+
+  // ── Ultimate Guardrail Fallback: Progressive MP4 stream ──
+  const spinGuard = spinner(`${label} — trying fallback via stable MP4 stream...`);
+  try {
+    const fallbackBase = (opts.name && total === 1) ? opts.name : safeFilename(extractVideoId(rawUrl) || 'download');
+    const destNoExt = path.join(opts.output, fallbackBase);
+    const outPath = uniquify(destNoExt, format);
+    const outNoExt = outPath.slice(0, -(format.length + 1));
+
+    const finalPath = await downloadWithYtDlp({
+      url: rawUrl,
+      destNoExt: outNoExt,
+      targetExt: format,
+      quality: opts.quality,
+      forceMp4Stream: true,
+      cookies: opts.cookies,
+      cookiesBrowser: opts.cookiesBrowser,
+      onProgress: ({ percent }) => {
+        spinGuard.update(`${label} — fallback MP4 stream download ${percent.toFixed(1)}%`);
+      }
+    });
+
+    spinGuard.stop(`${c.green('[OK]')} ${fallbackBase} (via MP4 guardrail) -> ${c.dim(finalPath)}`);
+  } catch (finalErr) {
+    spinGuard.stop(`${c.red('[ERR]')} ${label} — guardrail fallback failed: ${finalErr.message}`);
   }
 }
 

@@ -1,4 +1,4 @@
-import { Innertube, Constants } from 'youtubei.js';
+import { Innertube, Platform, Constants } from 'youtubei.js';
 import { spawn } from 'node:child_process';
 import https from 'node:https';
 import fs from 'node:fs';
@@ -40,13 +40,31 @@ export const VIDEO_FORMATS = ['mp4', 'webm', 'mkv'];
 export const SUPPORTED_FORMATS = [...AUDIO_FORMATS, ...VIDEO_FORMATS];
 
 // ANDROID_VR works most reliably, use it first.
-const YOUTUBEI_CLIENTS = ['ANDROID_VR', 'ANDROID', 'IOS', 'WEB', 'MWEB', 'TV_SIMPLY'];
+const YOUTUBEI_CLIENTS = ['ANDROID_VR', 'IOS', 'TV_SIMPLY', 'MWEB', 'ANDROID', 'WEB'];
 
 let clientPromise = null;
 
 /** Lazy singleton Innertube client (avoids re-negotiating a session per URL). */
 export function getClient() {
   if (!clientPromise) {
+    Platform.shim.eval = async (arg) => {
+      if (typeof arg === 'string') {
+        try {
+          return new Function(`return (${arg})`)();
+        } catch {
+          return new Function(arg)();
+        }
+      }
+      if (typeof arg === 'object' && arg !== null) {
+        const code = arg.output || arg.code;
+        if (code) {
+          const fn = new Function(code);
+          return fn();
+        }
+      }
+      return eval(arg);
+    };
+
     clientPromise = Innertube.create();
   }
   return clientPromise;
