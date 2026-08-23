@@ -156,7 +156,9 @@ async function processOneYouTube(client, rawUrl, opts, format, index, total) {
     try {
       const result = await fetchStream(client, id, {
         formatKind: isVideo ? 'video' : 'audio',
-        quality: opts.quality
+        quality: opts.quality,
+        poToken: opts.poToken,
+        cookies: opts.cookies
       });
 
       const title = result.info.basic_info?.title || id;
@@ -183,6 +185,9 @@ async function processOneYouTube(client, rawUrl, opts, format, index, total) {
           audio: result.audio,
           destNoExt: outNoExt,
           targetExt: format,
+          quality: opts.quality,
+          poToken: opts.poToken,
+          cookies: opts.cookies,
           onProgress: makeProgressHandler(spin, label)
         });
       } else {
@@ -192,6 +197,8 @@ async function processOneYouTube(client, rawUrl, opts, format, index, total) {
           destNoExt: outNoExt,
           targetExt: format,
           quality: opts.quality || 192,
+          poToken: opts.poToken,
+          cookies: opts.cookies,
           onProgress: makeProgressHandler(spin, label)
         });
       }
@@ -404,6 +411,8 @@ Examples:
     .option('-b, --batch <file>', 'read URLs from a text file (one URL per line)')
     .option('--cookies-from-browser <browser>', 'use cookies from browser (chrome, firefox, edge, brave) — needed for Instagram/Facebook')
     .option('--cookies <file>', 'path to cookies.txt file (Netscape format)')
+    .option('--po-token <token>', 'YouTube Proof of Origin token (PO-Token) for unthrottled 720p/1080p/4K')
+    .option('--save-po-token <token>', 'set and save default YouTube PO-Token')
     .action(async (urls, opts) => {
       // (action body unchanged, we just need to add the argv patch before parse)
 
@@ -418,6 +427,16 @@ Examples:
         log('OK', c.green, `Default output set to: ${resolved}`);
         if (!urls.length && !opts.batch) return;
       }
+
+      if (opts.savePoToken) {
+        saveConfig('poToken', opts.savePoToken);
+        log('OK', c.green, `Default PO-Token saved.`);
+        if (!urls.length && !opts.batch) return;
+      }
+
+      const cfg = loadConfig();
+      if (!opts.poToken && cfg.poToken) opts.poToken = cfg.poToken;
+      if (!opts.cookies && cfg.cookies) opts.cookies = cfg.cookies;
 
       opts.output = opts.output ? path.resolve(opts.output) : getDefaultOutput();
       const format = String(opts.format).toLowerCase();
