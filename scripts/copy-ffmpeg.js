@@ -26,10 +26,22 @@ async function main() {
   // Copy innertube binary
   const ext = process.platform === 'win32' ? '.exe' : '';
   const innertubeDest = path.join(distDir, `innertube${ext}`);
-  const innertubeSrc = path.join(projectDir, 'bin', `innertube${ext}`);
-  if (fs.existsSync(innertubeSrc)) {
-    fs.cpSync(innertubeSrc, innertubeDest);
-    console.log(`✓ Copied innertube: ${innertubeDest}`);
+  const innertubeCandidates = [
+    path.join(projectDir, 'bin', `innertube${ext}`),
+    path.join(projectDir, '..', 'innertube-rs', 'target', 'release', `innertube${ext}`),
+  ];
+  let innertubeFound = false;
+  for (const src of innertubeCandidates) {
+    if (fs.existsSync(src)) {
+      fs.cpSync(src, innertubeDest);
+      if (process.platform !== 'win32') fs.chmodSync(innertubeDest, 0o755);
+      console.log(`✓ Copied innertube: ${innertubeDest}`);
+      innertubeFound = true;
+      break;
+    }
+  }
+  if (!innertubeFound) {
+    console.warn('⚠ innertube binary not found in bin/ or local target/');
   }
 
   // Copy install.ps1 from site/public folder

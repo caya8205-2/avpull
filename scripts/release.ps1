@@ -77,6 +77,10 @@ if (!(Test-Path "dist/yt-dlp.exe")) {
     Write-Host "❌ yt-dlp.exe not found in dist/" -ForegroundColor Red
     exit 1
 }
+if (!(Test-Path "dist/innertube.exe")) {
+    Write-Host "❌ innertube.exe not found in dist/" -ForegroundColor Red
+    exit 1
+}
 
 Write-Host ""
 Write-Host "✨ Build successful!" -ForegroundColor Green

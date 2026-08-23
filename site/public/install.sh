@@ -48,6 +48,7 @@ get_binary_names() {
   AVPULL_BIN="avpull-${PLATFORM}"
   FFMPEG_RELEASE_BIN="ffmpeg-${PLATFORM}"
   YTDLP_RELEASE_BIN="yt-dlp-${PLATFORM}"
+  INNERTUBE_RELEASE_BIN="innertube-${PLATFORM}"
 }
 
 # ── Download helper ───────────────────────────────────────
@@ -169,6 +170,14 @@ main() {
     else
       warn "yt-dlp not found, non-YouTube downloads may not work"
     fi
+
+    if [ -f "${SCRIPT_DIR}/innertube" ]; then
+      cp "${SCRIPT_DIR}/innertube" "${INSTALL_DIR}/innertube"
+      chmod +x "${INSTALL_DIR}/innertube"
+      checkmark "Copied innertube"
+    else
+      warn "innertube not found, YouTube downloads may fail"
+    fi
   else
     echo -e "${CYAN}Fetching release info from GitHub ...${NC}"
 
@@ -203,6 +212,9 @@ main() {
 
     dl "${base_url}/${YTDLP_RELEASE_BIN}" "${INSTALL_DIR}/yt-dlp"
     chmod +x "${INSTALL_DIR}/yt-dlp"
+
+    dl "${base_url}/${INNERTUBE_RELEASE_BIN}" "${INSTALL_DIR}/innertube"
+    chmod +x "${INSTALL_DIR}/innertube"
   fi
 
   add_to_path

@@ -23,6 +23,7 @@ jobs:
             avpull-bin: avpull.exe
             ffmpeg-bin: ffmpeg.exe
             ytdlp-bin: yt-dlp.exe
+            innertube-bin: innertube.exe
             shell: pwsh
           - os: ubuntu-latest
             os-label: Linux
@@ -30,6 +31,7 @@ jobs:
             avpull-bin: avpull-linux
             ffmpeg-bin: ffmpeg-linux
             ytdlp-bin: yt-dlp-linux
+            innertube-bin: innertube-linux
             shell: bash
           - os: macos-latest
             os-label: macOS
@@ -37,6 +39,7 @@ jobs:
             avpull-bin: avpull-macos
             ffmpeg-bin: ffmpeg-macos
             ytdlp-bin: yt-dlp-macos
+            innertube-bin: innertube-macos
             shell: bash
     runs-on: ${{ matrix.os }}
     defaults:
@@ -78,6 +81,21 @@ jobs:
       - name: Skip build if release exists
         if: steps.check_release.outputs.exists == 'true'
         run: echo "Release already exists. Skipping build."
+
+      - name: Build innertube-rs
+        if: steps.check_release.outputs.exists == 'false'
+        shell: bash
+        run: |
+          git clone https://github.com/caya8205-2/innertube-rs.git /tmp/innertube-rs || git clone https://github.com/caya8205-2/innertube-rs.git innertube-rs-build
+          cd /tmp/innertube-rs 2>/dev/null || cd innertube-rs-build
+          cargo build --release
+          mkdir -p "$GITHUB_WORKSPACE/bin"
+          if [ -f "target/release/innertube.exe" ]; then
+            cp target/release/innertube.exe "$GITHUB_WORKSPACE/bin/innertube.exe"
+          else
+            cp target/release/innertube "$GITHUB_WORKSPACE/bin/innertube"
+            chmod +x "$GITHUB_WORKSPACE/bin/innertube"
+          fi
       
       - name: Install dependencies
         if: steps.check_release.outputs.exists == 'false'
@@ -118,6 +136,14 @@ jobs:
           elif [ -f "yt-dlp" ]; then
             mv yt-dlp "${{ matrix.ytdlp-bin }}"
             echo "Renamed yt-dlp -> ${{ matrix.ytdlp-bin }}"
+          fi
+
+          # Rename innertube binary
+          if [ -f "innertube.exe" ]; then
+            echo "Windows innertube, keeping as innertube.exe"
+          elif [ -f "innertube" ]; then
+            mv innertube "${{ matrix.innertube-bin }}"
+            echo "Renamed innertube -> ${{ matrix.innertube-bin }}"
           fi
       
       - name: Upload build artifacts

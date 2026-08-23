@@ -9,6 +9,7 @@ $AppDir = "$env:LOCALAPPDATA\avpull"
 $BinPath = Join-Path $AppDir 'avpull.exe'
 $FfmpegPath = Join-Path $AppDir 'ffmpeg.exe'
 $YtdlpPath = Join-Path $AppDir 'yt-dlp.exe'
+$InnertubePath = Join-Path $AppDir 'innertube.exe'
 
 function Checkmark {
   param([string]$Text)
@@ -88,6 +89,13 @@ if ($localExe -and (Test-Path $localExe)) {
   } else {
     Write-Host "  WARNING: yt-dlp.exe not found, non-YouTube downloads may not work" -ForegroundColor Yellow
   }
+  $localInnertube = Join-Path $scriptPath 'innertube.exe'
+  if (Test-Path $localInnertube) {
+    Copy-Item -LiteralPath $localInnertube -Destination $InnertubePath -Force
+    Checkmark "Copied innertube.exe"
+  } else {
+    Write-Host "  WARNING: innertube.exe not found, YouTube downloads may fail" -ForegroundColor Yellow
+  }
 } else {
   Write-Host "Fetching release info from GitHub ..." -ForegroundColor Cyan
   
@@ -105,6 +113,7 @@ if ($localExe -and (Test-Path $localExe)) {
     Dl "$baseUrl/avpull.exe" $BinPath
     Dl "$baseUrl/ffmpeg.exe" $FfmpegPath
     Dl "$baseUrl/yt-dlp.exe" $YtdlpPath
+    Dl "$baseUrl/innertube.exe" $InnertubePath
   } catch {
     Write-Host ""
     Write-Host "ERROR: Failed to fetch release from GitHub." -ForegroundColor Red

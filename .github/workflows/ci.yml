@@ -33,6 +33,20 @@ jobs:
         with:
           node-version: 20
 
+      - name: Build innertube-rs
+        shell: bash
+        run: |
+          git clone https://github.com/caya8205-2/innertube-rs.git /tmp/innertube-rs || git clone https://github.com/caya8205-2/innertube-rs.git innertube-rs-build
+          cd /tmp/innertube-rs 2>/dev/null || cd innertube-rs-build
+          cargo build --release
+          mkdir -p "$GITHUB_WORKSPACE/bin"
+          if [ -f "target/release/innertube.exe" ]; then
+            cp target/release/innertube.exe "$GITHUB_WORKSPACE/bin/innertube.exe"
+          else
+            cp target/release/innertube "$GITHUB_WORKSPACE/bin/innertube"
+            chmod +x "$GITHUB_WORKSPACE/bin/innertube"
+          fi
+
       - run: bun install
 
       - name: Build binary
@@ -48,10 +62,12 @@ jobs:
             test -f dist/avpull.exe || exit 1
             test -f dist/ffmpeg.exe || exit 1
             test -f dist/yt-dlp.exe || exit 1
+            test -f dist/innertube.exe || exit 1
           else
             test -f dist/avpull || exit 1
             test -f dist/ffmpeg || exit 1
             test -f dist/yt-dlp || exit 1
+            test -f dist/innertube || exit 1
           fi
           echo "All artifacts verified."
 
