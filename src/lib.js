@@ -34,7 +34,9 @@ export async function resolveFfmpeg() {
   return _ffmpegCached;
 }
 
+const INNERTUBE_TARGET_VERSION = '0.3.0';
 let _innertubeCached = null;
+
 export async function resolveInnertube() {
   if (_innertubeCached) return _innertubeCached;
 
@@ -42,15 +44,17 @@ export async function resolveInnertube() {
   const exeDir = path.dirname(process.execPath);
   const projectRoot = path.dirname(path.dirname(import.meta.url ? new URL(import.meta.url).pathname.replace(/^\/([A-Z]:)/, '$1') : process.argv[1]));
   const userCacheDir = path.join(os.homedir(), '.avpull', 'bin');
+  const userCacheBin = path.join(userCacheDir, `innertube${ext}`);
+  const versionFile = path.join(userCacheDir, '.innertube-version');
 
-  const candidates = [
+  // 1. Check local/bundled binaries first
+  const localCandidates = [
     path.join(exeDir, `innertube${ext}`),
     path.join(projectRoot, 'bin', `innertube${ext}`),
-    path.join(userCacheDir, `innertube${ext}`),
     path.join(projectRoot, '..', 'innertube-rs', 'target', 'release', `innertube${ext}`),
   ];
 
-  for (const c of candidates) {
+  for (const c of localCandidates) {
     try {
       if (fs.existsSync(c)) {
         _innertubeCached = c;
@@ -59,44 +63,92 @@ export async function resolveInnertube() {
     } catch {}
   }
 
-  // Check if innertube is available in system PATH
+  // 2. Check user cache and verify pinned version
+  if (fs.existsSync(userCacheBin)) {
+    try {
+      if (fs.existsSync(versionFile)) {
+        const cachedVer = fs.readFileSync(versionFile, 'utf-8').trim();
+        if (cachedVer === INNERTUBE_TARGET_VERSION) {
+          _innertubeCached = userCacheBin;
+          return _innertubeCached;
+        }
+      }
+    } catch {}
+  }
+
+  // 3. Auto-download target version from GitHub releases
+  const arch = process.arch === 'arm64' ? 'aarch64' : 'x86_64';
+  const archiveName = process.platform === 'win32'
+    ? 'innertube-windows-x86_64.zip'
+    : process.platform === 'darwin'
+      ? `innertube-macos-${arch}.tar.gz`
+      : 'innertube-linux-x86_64.tar.gz';
+
+  const directAssetName = process.platform === 'win32'
+    ? 'innertube.exe'
+    : process.platform === 'darwin'
+      ? 'innertube-macos'
+      : 'innertube-linux';
+
+  const downloadTargets = [
+    // 1. Tagged release archive on innertube-rs
+    {
+      url: `https://github.com/caya8205-2/innertube-rs/releases/download/v${INNERTUBE_TARGET_VERSION}/${archiveName}`,
+      isArchive: true,
+    },
+    // 2. Latest release archive on innertube-rs
+    {
+      url: `https://github.com/caya8205-2/innertube-rs/releases/latest/download/${archiveName}`,
+      isArchive: true,
+    },
+    // 3. Fallback direct binary on avpull release
+    {
+      url: `https://github.com/caya8205-2/avpull/releases/latest/download/${directAssetName}`,
+      isArchive: false,
+    },
+  ];
+
+  log('INFO', c.cyan, `Updating innertube engine to v${INNERTUBE_TARGET_VERSION}...`);
+
+  fs.mkdirSync(userCacheDir, { recursive: true });
+
+  for (const target of downloadTargets) {
+    try {
+      const res = await fetch(target.url, { redirect: 'follow' });
+      if (!res.ok) continue;
+      const buf = Buffer.from(await res.arrayBuffer());
+
+      if (target.isArchive) {
+        const tmpArchive = path.join(os.tmpdir(), `innertube-v${INNERTUBE_TARGET_VERSION}-${Date.now()}-${archiveName}`);
+        fs.writeFileSync(tmpArchive, buf);
+        try {
+          execSync(`tar -xf "${tmpArchive}" -C "${userCacheDir}"`, { stdio: 'ignore' });
+        } finally {
+          try { fs.unlinkSync(tmpArchive); } catch {}
+        }
+      } else {
+        fs.writeFileSync(userCacheBin, buf);
+      }
+
+      if (fs.existsSync(userCacheBin)) {
+        if (process.platform !== 'win32') {
+          fs.chmodSync(userCacheBin, 0o755);
+        }
+        fs.writeFileSync(versionFile, INNERTUBE_TARGET_VERSION, 'utf-8');
+        log('OK', c.green, `innertube engine v${INNERTUBE_TARGET_VERSION} installed: ${userCacheBin}`);
+        _innertubeCached = userCacheBin;
+        return _innertubeCached;
+      }
+    } catch {}
+  }
+
+  // 4. Fallback to system PATH if download fails
   try {
     const checkCmd = process.platform === 'win32' ? 'where.exe innertube' : 'which innertube';
     execSync(checkCmd, { stdio: 'ignore' });
     _innertubeCached = 'innertube';
     return _innertubeCached;
   } catch {}
-
-  // Auto-download binary from GitHub releases
-  const assetName = process.platform === 'win32'
-    ? 'innertube.exe'
-    : process.platform === 'darwin'
-      ? 'innertube-macos'
-      : 'innertube-linux';
-
-  const dest = path.join(userCacheDir, `innertube${ext}`);
-  const urls = [
-    `https://github.com/caya8205-2/innertube-rs/releases/latest/download/${assetName}`,
-    `https://github.com/caya8205-2/avpull/releases/latest/download/${assetName}`,
-  ];
-
-  log('INFO', c.cyan, 'innertube engine not found, downloading from GitHub...');
-
-  for (const url of urls) {
-    try {
-      const res = await fetch(url, { redirect: 'follow' });
-      if (!res.ok) continue;
-      const buf = Buffer.from(await res.arrayBuffer());
-      fs.mkdirSync(userCacheDir, { recursive: true });
-      fs.writeFileSync(dest, buf);
-      if (process.platform !== 'win32') {
-        fs.chmodSync(dest, 0o755);
-      }
-      log('OK', c.green, `innertube engine downloaded: ${dest}`);
-      _innertubeCached = dest;
-      return _innertubeCached;
-    } catch {}
-  }
 
   _innertubeCached = 'innertube';
   return _innertubeCached;
