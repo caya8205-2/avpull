@@ -2,3 +2,5 @@ node_modules
 dist
 .hallmark
 docs
+*.exe
+bin/*.exe

@@ -23,6 +23,15 @@ async function main() {
     process.exit(1);
   }
 
+  // Copy innertube binary
+  const ext = process.platform === 'win32' ? '.exe' : '';
+  const innertubeDest = path.join(distDir, `innertube${ext}`);
+  const innertubeSrc = path.join(projectDir, 'bin', `innertube${ext}`);
+  if (fs.existsSync(innertubeSrc)) {
+    fs.cpSync(innertubeSrc, innertubeDest);
+    console.log(`✓ Copied innertube: ${innertubeDest}`);
+  }
+
   // Copy install.ps1 from site/public folder
   const installSrc = path.join(projectDir, 'site', 'public', 'install.ps1');
   const installDest = path.join(distDir, 'install.ps1');
