@@ -1,4 +1,4 @@
-import { spawn } from 'node:child_process';
+import { spawn, execSync } from 'node:child_process';
 import https from 'node:https';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -35,19 +35,21 @@ export async function resolveFfmpeg() {
 }
 
 let _innertubeCached = null;
-export function resolveInnertube() {
+export async function resolveInnertube() {
   if (_innertubeCached) return _innertubeCached;
+
+  const ext = process.platform === 'win32' ? '.exe' : '';
   const exeDir = path.dirname(process.execPath);
   const projectRoot = path.dirname(path.dirname(import.meta.url ? new URL(import.meta.url).pathname.replace(/^\/([A-Z]:)/, '$1') : process.argv[1]));
+  const userCacheDir = path.join(os.homedir(), '.avpull', 'bin');
+
   const candidates = [
-    path.join(exeDir, 'innertube.exe'),
-    path.join(exeDir, 'innertube'),
-    path.join(projectRoot, 'bin', 'innertube.exe'),
-    path.join(projectRoot, 'bin', 'innertube'),
-    'C:\\Users\\Caya\\Desktop\\Project\\innertube-rs\\target\\release\\innertube.exe',
-    'innertube.exe',
-    'innertube'
+    path.join(exeDir, `innertube${ext}`),
+    path.join(projectRoot, 'bin', `innertube${ext}`),
+    path.join(userCacheDir, `innertube${ext}`),
+    path.join(projectRoot, '..', 'innertube-rs', 'target', 'release', `innertube${ext}`),
   ];
+
   for (const c of candidates) {
     try {
       if (fs.existsSync(c)) {
@@ -56,6 +58,46 @@ export function resolveInnertube() {
       }
     } catch {}
   }
+
+  // Check if innertube is available in system PATH
+  try {
+    const checkCmd = process.platform === 'win32' ? 'where.exe innertube' : 'which innertube';
+    execSync(checkCmd, { stdio: 'ignore' });
+    _innertubeCached = 'innertube';
+    return _innertubeCached;
+  } catch {}
+
+  // Auto-download binary from GitHub releases
+  const assetName = process.platform === 'win32'
+    ? 'innertube.exe'
+    : process.platform === 'darwin'
+      ? 'innertube-macos'
+      : 'innertube-linux';
+
+  const dest = path.join(userCacheDir, `innertube${ext}`);
+  const urls = [
+    `https://github.com/caya8205-2/innertube-rs/releases/latest/download/${assetName}`,
+    `https://github.com/caya8205-2/avpull/releases/latest/download/${assetName}`,
+  ];
+
+  log(c.cyan('⏳ innertube engine not found, downloading from GitHub...'));
+
+  for (const url of urls) {
+    try {
+      const res = await fetch(url, { redirect: 'follow' });
+      if (!res.ok) continue;
+      const buf = Buffer.from(await res.arrayBuffer());
+      fs.mkdirSync(userCacheDir, { recursive: true });
+      fs.writeFileSync(dest, buf);
+      if (process.platform !== 'win32') {
+        fs.chmodSync(dest, 0o755);
+      }
+      log(c.green(`✓ innertube engine downloaded: ${dest}`));
+      _innertubeCached = dest;
+      return _innertubeCached;
+    } catch {}
+  }
+
   _innertubeCached = 'innertube';
   return _innertubeCached;
 }
@@ -64,8 +106,8 @@ export const AUDIO_FORMATS = ['mp3', 'wav', 'm4a', 'opus', 'flac', 'aac', 'ogg']
 export const VIDEO_FORMATS = ['mp4', 'webm', 'mkv'];
 export const SUPPORTED_FORMATS = [...AUDIO_FORMATS, ...VIDEO_FORMATS];
 
-export function getClient() {
-  return { binary: resolveInnertube() };
+export async function getClient() {
+  return { binary: await resolveInnertube() };
 }
 
 export function isAudioFormat(fmt) {
@@ -110,7 +152,7 @@ export function extractPlaylistId(url) {
 
 // ── Stream Fetch via innertube-rs ───────────────────────
 export async function fetchStream(_client, videoId, { formatKind, quality, cookies }) {
-  const bin = resolveInnertube();
+  const bin = await resolveInnertube();
   return new Promise((resolve, reject) => {
     const fmtArg = formatKind === 'audio' ? 'mp3' : 'mp4';
     const args = ['stream', videoId, '-f', fmtArg];
@@ -248,7 +290,7 @@ export async function convertAudioToFile({ videoId, format, destNoExt, targetExt
 
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'avpull-'));
   const tmpPath = path.join(tmpDir, 'raw.tmp');
-  const bin = resolveInnertube();
+  const bin = await resolveInnertube();
 
   try {
     const args = ['download', videoId, '-f', targetExt, '--output-audio', tmpPath];
@@ -309,7 +351,7 @@ export async function muxVideoToFile({ videoId, video, audio, destNoExt, targetE
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'avpull-'));
   const tmpVideo = path.join(tmpDir, 'video.tmp');
   const tmpAudio = path.join(tmpDir, 'audio.tmp');
-  const bin = resolveInnertube();
+  const bin = await resolveInnertube();
 
   try {
     const args = ['download', videoId, '-f', targetExt, '--output-audio', tmpAudio, '--output-video', tmpVideo];
