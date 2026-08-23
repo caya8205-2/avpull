@@ -68,69 +68,65 @@ export function getClient() {
   return { binary: resolveInnertube() };
 }
 
-const ID_PATTERNS = [
-  /(?:youtube\.com\/watch\?v=|music\.youtube\.com\/watch\?v=)([\w-]{11})/,
-  /youtu\.be\/([\w-]{11})/,
-  /youtube\.com\/shorts\/([\w-]{11})/,
-  /youtube\.com\/embed\/([\w-]{11})/,
-  /youtube\.com\/live\/([\w-]{11})/
-];
-
-/** Extract an 11-char YouTube video ID from a URL, or accept a raw ID. */
-export function extractVideoId(input) {
-  const trimmed = input.trim();
-  if (/^[\w-]{11}$/.test(trimmed)) return trimmed;
-  for (const re of ID_PATTERNS) {
-    const m = trimmed.match(re);
-    if (m) return m[1];
-  }
-  return null;
-}
-
 export function isAudioFormat(fmt) {
-  return AUDIO_FORMATS.includes(fmt);
+  return AUDIO_FORMATS.includes(fmt.toLowerCase());
 }
 
 export function isVideoFormat(fmt) {
-  return VIDEO_FORMATS.includes(fmt);
+  return VIDEO_FORMATS.includes(fmt.toLowerCase());
 }
 
-/** Sanitize a video title into a safe filename. */
 export function safeFilename(name) {
-  return name
-    .replace(/[\\/:*?"<>|]/g, '')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .slice(0, 120) || 'untitled';
+  return name.replace(/[<>:"/\\|?*]/g, '_').trim();
 }
 
-export function formatBytes(n) {
-  if (!n && n !== 0) return '?';
-  const units = ['B', 'KB', 'MB', 'GB'];
-  let i = 0;
-  let v = n;
-  while (v >= 1024 && i < units.length - 1) {
-    v /= 1024;
-    i++;
+export function formatBytes(bytes) {
+  if (!bytes || bytes === 0) return '0 B';
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return `${(bytes / Math.pow(k, i)).toFixed(1)} ${sizes[i]}`;
+}
+
+export function uniquify(destNoExt, ext) {
+  let candidate = `${destNoExt}.${ext}`;
+  if (!fs.existsSync(candidate)) return candidate;
+  let counter = 1;
+  while (fs.existsSync(`${destNoExt} (${counter}).${ext}`)) {
+    counter++;
   }
-  return `${v.toFixed(v >= 10 || i === 0 ? 0 : 1)}${units[i]}`;
+  return `${destNoExt} (${counter}).${ext}`;
 }
 
-/**
- * Fetch video info + the format(s) needed for the requested output using native innertube-rs.
- */
-export async function fetchStream(_client, videoId, { formatKind }) {
+export function extractVideoId(url) {
+  const match = url.match(/(?:v=|\/embed\/|youtu\.be\/|\/shorts\/)([a-zA-Z0-9_-]{11})/);
+  return match ? match[1] : null;
+}
+
+export function extractPlaylistId(url) {
+  const match = url.match(/[?&]list=([a-zA-Z0-9_-]+)/);
+  return match ? match[1] : null;
+}
+
+// ── Stream Fetch via innertube-rs ───────────────────────
+export async function fetchStream(_client, videoId, { formatKind, quality }) {
   const bin = resolveInnertube();
   return new Promise((resolve, reject) => {
     const fmtArg = formatKind === 'audio' ? 'mp3' : 'mp4';
-    const proc = spawn(bin, ['stream', videoId, '-f', fmtArg], { stdio: ['ignore', 'pipe', 'pipe'] });
+    const args = ['stream', videoId, '-f', fmtArg];
+    if (quality) args.push('-q', quality);
+
+    const proc = spawn(bin, args, { stdio: ['ignore', 'pipe', 'pipe'] });
     let stdout = '';
     let stderr = '';
 
     proc.stdout.on('data', (d) => { stdout += d; });
     proc.stderr.on('data', (d) => { stderr += d; });
 
-    proc.on('error', (err) => reject(new Error(`Failed to spawn innertube binary (${bin}): ${err.message}`)));
+    proc.on('error', (err) => {
+      reject(new Error(`Failed to execute innertube CLI (${bin}): ${err.message}`));
+    });
+
     proc.on('close', (code) => {
       if (code !== 0) {
         return reject(new Error(`innertube failed (exit code ${code}): ${stderr || stdout}`));
@@ -149,6 +145,7 @@ export async function fetchStream(_client, videoId, { formatKind }) {
           if (!data.audio) throw new Error('No audio format returned by innertube');
           return resolve({
             info,
+            videoId,
             kind: 'audio',
             audio: {
               format: {
@@ -166,6 +163,7 @@ export async function fetchStream(_client, videoId, { formatKind }) {
 
         return resolve({
           info,
+          videoId,
           kind: 'video',
           video: {
             format: {
@@ -199,69 +197,6 @@ async function runFfmpeg(args, onStderr) {
     ff.on('error', reject);
     ff.on('close', (code) => (code === 0 ? resolve() : reject(new Error(`ffmpeg exited with code ${code}`))));
   });
-}
-
-// ── Stream Download Pipeline ────────────────────────────
-async function downloadFormatToFile(format, tmpPath, onProgress) {
-  const url = format.url;
-  const total = format.content_length ? Number(format.content_length) : null;
-  const out = fs.createWriteStream(tmpPath);
-
-  const CHUNK_BLOCK = 10 * 1024 * 1024; // 10MB ranges
-  let downloaded = 0;
-
-  const headers = {
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36',
-    'Origin': 'https://www.youtube.com',
-    'Referer': 'https://www.youtube.com/'
-  };
-
-  if (total && total > CHUNK_BLOCK) {
-    while (downloaded < total) {
-      const end = Math.min(downloaded + CHUNK_BLOCK - 1, total - 1);
-      const res = await fetch(url, {
-        method: 'GET',
-        headers: {
-          ...headers,
-          Range: `bytes=${downloaded}-${end}`,
-        },
-      });
-
-      if (!res.ok && res.status !== 206 && res.status !== 200) {
-        throw new Error(`Stream chunk (${downloaded}-${end}) failed: ${res.status} ${res.statusText}`);
-      }
-
-      for await (const chunk of res.body) {
-        out.write(chunk);
-        downloaded += chunk.length;
-        onProgress?.({ downloaded, total });
-      }
-    }
-  } else {
-    const res = await fetch(url, {
-      method: 'GET',
-      headers: {
-        ...headers,
-        Range: 'bytes=0-',
-      },
-    });
-
-    if (!res.ok && res.status !== 206 && res.status !== 200) {
-      throw new Error(`Stream failed: ${res.status} ${res.statusText}`);
-    }
-
-    for await (const chunk of res.body) {
-      out.write(chunk);
-      downloaded += chunk.length;
-      onProgress?.({ downloaded, total: total || downloaded });
-    }
-  }
-
-  await new Promise((resolve, reject) => {
-    out.end((err) => (err ? reject(err) : resolve()));
-  });
-
-  onProgress?.({ downloaded: total || downloaded, total: total || downloaded, done: true });
 }
 
 /** Guess audio ffmpeg codec args to go from a source mime_type to a target extension. */
@@ -304,25 +239,58 @@ function buildAudioArgs({ sourceMime, targetExt, quality, input }) {
 }
 
 /**
- * Fetch an audio-only format to a temp file (with resume on failure), then
- * encode it with ffmpeg.
+ * Fetch and convert an audio format to a target file via innertube download + ffmpeg.
  */
-export async function convertAudioToFile({ format, destNoExt, targetExt, quality, onProgress }) {
+export async function convertAudioToFile({ videoId, format, destNoExt, targetExt, quality, onProgress }) {
   const outPath = `${destNoExt}.${targetExt}`;
   fs.mkdirSync(path.dirname(outPath), { recursive: true });
 
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'avpull-'));
   const tmpPath = path.join(tmpDir, 'raw.tmp');
+  const bin = resolveInnertube();
 
   try {
-    await downloadFormatToFile(format, tmpPath, onProgress);
+    const args = ['download', videoId, '-f', targetExt, '--output-audio', tmpPath];
+    if (quality) args.push('-q', quality);
 
-    const args = buildAudioArgs({ sourceMime: format.mime_type, targetExt, quality, input: tmpPath });
-    args.push(outPath);
-    await runFfmpeg(args, (stderr) => {
+    const proc = spawn(bin, args, { stdio: ['ignore', 'pipe', 'pipe'] });
+    let stdout = '';
+    let stderr = '';
+    let resultMeta = null;
+
+    await new Promise((resolve, reject) => {
+      proc.stdout.on('data', (d) => {
+        const lines = d.toString().split('\n');
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          try {
+            const ev = JSON.parse(line);
+            if (ev.type === 'progress') {
+              onProgress?.({ downloaded: ev.downloaded, total: ev.total, done: false });
+            } else if (ev.type === 'done') {
+              resultMeta = ev;
+            }
+          } catch {}
+        }
+      });
+      proc.stderr.on('data', (d) => { stderr += d; });
+      proc.on('close', (code) => {
+        if (code === 0) resolve();
+        else reject(new Error(`innertube download failed (code ${code}): ${stderr || stdout}`));
+      });
+    });
+
+    onProgress?.({ done: true });
+
+    const mime = resultMeta?.audioMime || format?.mime_type;
+    const ffmpegArgs = buildAudioArgs({ sourceMime: mime, targetExt, quality, input: tmpPath });
+    ffmpegArgs.push(outPath);
+
+    await runFfmpeg(ffmpegArgs, (stderr) => {
       const match = stderr.match(/time=(\d{2}:\d{2}:\d{2}\.\d+)/);
       if (match) onProgress?.({ ffmpegTime: match[1] });
     });
+
     return outPath;
   } finally {
     fs.rmSync(tmpDir, { recursive: true, force: true });
@@ -330,41 +298,56 @@ export async function convertAudioToFile({ format, destNoExt, targetExt, quality
 }
 
 /**
- * Fetch a video-only format and an audio-only format to temp files, then mux
- * them into a single output file with ffmpeg.
+ * Fetch video and audio streams via innertube download and mux them with ffmpeg.
  */
-export async function muxVideoToFile({ video, audio, destNoExt, targetExt, onProgress }) {
+export async function muxVideoToFile({ videoId, video, audio, destNoExt, targetExt, onProgress }) {
   const outPath = `${destNoExt}.${targetExt}`;
   fs.mkdirSync(path.dirname(outPath), { recursive: true });
 
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'avpull-'));
   const tmpVideo = path.join(tmpDir, 'video.tmp');
   const tmpAudio = path.join(tmpDir, 'audio.tmp');
-
-  const vTotal = video.format.content_length ? Number(video.format.content_length) : undefined;
-  const aTotal = audio.format.content_length ? Number(audio.format.content_length) : undefined;
-  const total = vTotal !== undefined && aTotal !== undefined ? vTotal + aTotal : undefined;
-
-  let vBytes = 0;
-  let aBytes = 0;
-  let lastEmit = 0;
-  const emit = (done = false) => {
-    if (!onProgress) return;
-    const now = Date.now();
-    if (!done && now - lastEmit < 200) return;
-    lastEmit = now;
-    onProgress({ downloaded: vBytes + aBytes, total, done });
-  };
+  const bin = resolveInnertube();
 
   try {
-    await Promise.all([
-      downloadFormatToFile(video.format, tmpVideo, (p) => { vBytes = p.downloaded; emit(); }),
-      downloadFormatToFile(audio.format, tmpAudio, (p) => { aBytes = p.downloaded; emit(); }),
-    ]);
-    emit(true);
+    const args = ['download', videoId, '-f', targetExt, '--output-audio', tmpAudio, '--output-video', tmpVideo];
 
-    const videoMime = video.format.mime_type || '';
-    const audioMime = audio.format.mime_type || '';
+    const proc = spawn(bin, args, { stdio: ['ignore', 'pipe', 'pipe'] });
+    let stdout = '';
+    let stderr = '';
+    let resultMeta = null;
+
+    let aBytes = 0; let aTotal = 0;
+    let vBytes = 0; let vTotal = 0;
+
+    await new Promise((resolve, reject) => {
+      proc.stdout.on('data', (d) => {
+        const lines = d.toString().split('\n');
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          try {
+            const ev = JSON.parse(line);
+            if (ev.type === 'progress') {
+              if (ev.stream === 'audio') { aBytes = ev.downloaded; aTotal = ev.total; }
+              if (ev.stream === 'video') { vBytes = ev.downloaded; vTotal = ev.total; }
+              onProgress?.({ downloaded: aBytes + vBytes, total: (aTotal + vTotal) || undefined, done: false });
+            } else if (ev.type === 'done') {
+              resultMeta = ev;
+            }
+          } catch {}
+        }
+      });
+      proc.stderr.on('data', (d) => { stderr += d; });
+      proc.on('close', (code) => {
+        if (code === 0) resolve();
+        else reject(new Error(`innertube download failed (code ${code}): ${stderr || stdout}`));
+      });
+    });
+
+    onProgress?.({ done: true });
+
+    const videoMime = resultMeta?.videoMime || video?.format?.mime_type || '';
+    const audioMime = resultMeta?.audioMime || audio?.format?.mime_type || '';
     const isAvc = /avc1|h264/i.test(videoMime);
     const isVp9orVp8orAv1 = /vp9|vp8|av01/i.test(videoMime);
     const isAac = /mp4a/i.test(audioMime);
@@ -383,11 +366,12 @@ export async function muxVideoToFile({ video, audio, destNoExt, targetExt, onPro
       aArgs = isAac ? ['-c:a', 'copy'] : ['-c:a', 'aac', '-b:a', '192k'];
     }
 
-    const args = ['-y', '-i', tmpVideo, '-i', tmpAudio, ...vArgs, ...aArgs, '-map', '0:v:0', '-map', '1:a:0', outPath];
-    await runFfmpeg(args, (stderr) => {
+    const ffmpegArgs = ['-y', '-i', tmpVideo, '-i', tmpAudio, ...vArgs, ...aArgs, '-map', '0:v:0', '-map', '1:a:0', outPath];
+    await runFfmpeg(ffmpegArgs, (stderr) => {
       const match = stderr.match(/time=(\d{2}:\d{2}:\d{2}\.\d+)/);
       if (match) onProgress?.({ ffmpegTime: match[1] });
     });
+
     return outPath;
   } finally {
     fs.rmSync(tmpDir, { recursive: true, force: true });

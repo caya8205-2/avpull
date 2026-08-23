@@ -178,6 +178,7 @@ async function processOneYouTube(client, rawUrl, opts, format, index, total) {
 
       if (isVideo) {
         await muxVideoToFile({
+          videoId: id,
           video: result.video,
           audio: result.audio,
           destNoExt: outNoExt,
@@ -186,8 +187,8 @@ async function processOneYouTube(client, rawUrl, opts, format, index, total) {
         });
       } else {
         await convertAudioToFile({
+          videoId: id,
           format: result.audio.format,
-          session: result.audio.session,
           destNoExt: outNoExt,
           targetExt: format,
           quality: opts.quality || 192,
