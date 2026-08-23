@@ -81,6 +81,31 @@ function runYtDlp(args, { onStderr } = {}) {
   });
 }
 
+export function detectDefaultBrowser() {
+  const platform = process.platform;
+  if (platform === 'win32') {
+    const localAppData = process.env.LOCALAPPDATA || '';
+    const appData = process.env.APPDATA || '';
+    if (fs.existsSync(path.join(localAppData, 'BraveSoftware', 'Brave-Browser', 'User Data'))) return 'brave';
+    if (fs.existsSync(path.join(localAppData, 'Google', 'Chrome', 'User Data'))) return 'chrome';
+    if (fs.existsSync(path.join(localAppData, 'Microsoft', 'Edge', 'User Data'))) return 'edge';
+    if (fs.existsSync(path.join(appData, 'Mozilla', 'Firefox', 'Profiles'))) return 'firefox';
+  } else if (platform === 'darwin') {
+    const home = process.env.HOME || '';
+    if (fs.existsSync(path.join(home, 'Library/Application Support/BraveSoftware/Brave-Browser'))) return 'brave';
+    if (fs.existsSync(path.join(home, 'Library/Application Support/Google/Chrome'))) return 'chrome';
+    if (fs.existsSync(path.join(home, 'Library/Application Support/Microsoft Edge'))) return 'edge';
+    if (fs.existsSync(path.join(home, 'Library/Application Support/Firefox/Profiles'))) return 'firefox';
+  } else {
+    const home = process.env.HOME || '';
+    if (fs.existsSync(path.join(home, '.config/BraveSoftware'))) return 'brave';
+    if (fs.existsSync(path.join(home, '.config/google-chrome'))) return 'chrome';
+    if (fs.existsSync(path.join(home, '.config/microsoft-edge'))) return 'edge';
+    if (fs.existsSync(path.join(home, '.mozilla/firefox'))) return 'firefox';
+  }
+  return null;
+}
+
 /** Get media info via --dump-single-json. Returns parsed JSON object. */
 export async function getMediaInfo(url, { cookies, cookiesBrowser } = {}) {
   await resolveYtDlp();
@@ -90,23 +115,33 @@ export async function getMediaInfo(url, { cookies, cookiesBrowser } = {}) {
   if (cookies) args.push('--cookies', cookies);
 
   args.push(url);
-  const { stdout } = await runYtDlp(args);
-  return JSON.parse(stdout);
+  try {
+    const { stdout } = await runYtDlp(args);
+    return JSON.parse(stdout);
+  } catch (err) {
+    if (cookiesBrowser && (err.message.includes('cookie') || err.message.includes('database'))) {
+      const fallbackArgs = ['--dump-single-json', '--no-playlist'];
+      if (cookies) fallbackArgs.push('--cookies', cookies);
+      fallbackArgs.push(url);
+      const { stdout } = await runYtDlp(fallbackArgs);
+      return JSON.parse(stdout);
+    }
+    throw err;
+  }
 }
 
-/**
- * Download media using yt-dlp.
- *
- * @param {object} opts
- * @param {string} opts.url - Media URL
- * @param {string} opts.destNoExt - Output path without extension (e.g. "./avpull/My Video")
- * @param {string} opts.targetExt - Target format extension (mp3, mp4, etc.)
- * @param {string} [opts.quality] - Quality setting
- * @param {string} [opts.cookies] - Path to cookies.txt
- * @param {string} [opts.cookiesBrowser] - Browser name for cookie extraction
- * @param {function} [opts.onProgress] - Progress callback ({ percent })
- */
 export async function downloadWithYtDlp(opts) {
+  try {
+    return await executeYtDlp(opts);
+  } catch (err) {
+    if (opts.cookiesBrowser && (err.message.includes('cookie') || err.message.includes('database'))) {
+      return await executeYtDlp({ ...opts, cookiesBrowser: null });
+    }
+    throw err;
+  }
+}
+
+async function executeYtDlp(opts) {
   const { url, destNoExt, targetExt, quality, cookies, cookiesBrowser, forceMp4Stream, onProgress } = opts;
   const ytdlp = await resolveYtDlp();
   const ffmpegPath = await resolveFfmpeg();

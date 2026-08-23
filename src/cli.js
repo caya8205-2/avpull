@@ -17,7 +17,7 @@ import {
   SUPPORTED_FORMATS
 } from './lib.js';
 import { isYouTubeUrl } from './platform.js';
-import { getMediaInfo, downloadWithYtDlp } from './ytdlp.js';
+import { getMediaInfo, downloadWithYtDlp, detectDefaultBrowser } from './ytdlp.js';
 import https from 'node:https';
 import { log, c, askLine, spinner } from './ui.js';
 
@@ -157,7 +157,6 @@ async function processOneYouTube(client, rawUrl, opts, format, index, total) {
       const result = await fetchStream(client, id, {
         formatKind: isVideo ? 'video' : 'audio',
         quality: opts.quality,
-        poToken: opts.poToken,
         cookies: opts.cookies
       });
 
@@ -186,7 +185,6 @@ async function processOneYouTube(client, rawUrl, opts, format, index, total) {
           destNoExt: outNoExt,
           targetExt: format,
           quality: opts.quality,
-          poToken: opts.poToken,
           cookies: opts.cookies,
           onProgress: makeProgressHandler(spin, label)
         });
@@ -197,7 +195,6 @@ async function processOneYouTube(client, rawUrl, opts, format, index, total) {
           destNoExt: outNoExt,
           targetExt: format,
           quality: opts.quality || 192,
-          poToken: opts.poToken,
           cookies: opts.cookies,
           onProgress: makeProgressHandler(spin, label)
         });
@@ -409,10 +406,9 @@ Examples:
     .option('-n, --name <name>', 'custom filename (no extension, only works with 1 URL)')
     .option('-q, --quality <n>', 'audio: bitrate kbps (128, 192, 256, 320, etc). video: resolution (240, 360, 480, 720, 1080) or best')
     .option('-b, --batch <file>', 'read URLs from a text file (one URL per line)')
-    .option('--cookies-from-browser <browser>', 'use cookies from browser (chrome, firefox, edge, brave) — needed for Instagram/Facebook')
+    .option('--cookies-from-browser [browser]', 'use cookies from browser (auto-detects chrome, brave, edge, firefox if omitted)')
+    .option('--save-cookies-from-browser <browser>', 'set and save default browser for cookies')
     .option('--cookies <file>', 'path to cookies.txt file (Netscape format)')
-    .option('--po-token <token>', 'YouTube Proof of Origin token (PO-Token) for unthrottled 720p/1080p/4K')
-    .option('--save-po-token <token>', 'set and save default YouTube PO-Token')
     .action(async (urls, opts) => {
       // (action body unchanged, we just need to add the argv patch before parse)
 
@@ -428,14 +424,19 @@ Examples:
         if (!urls.length && !opts.batch) return;
       }
 
-      if (opts.savePoToken) {
-        saveConfig('poToken', opts.savePoToken);
-        log('OK', c.green, `Default PO-Token saved.`);
+      if (opts.saveCookiesFromBrowser) {
+        saveConfig('cookiesBrowser', opts.saveCookiesFromBrowser);
+        log('OK', c.green, `Default browser for cookies set to: ${opts.saveCookiesFromBrowser}`);
         if (!urls.length && !opts.batch) return;
       }
 
       const cfg = loadConfig();
-      if (!opts.poToken && cfg.poToken) opts.poToken = cfg.poToken;
+      if (!opts.cookiesBrowser && cfg.cookiesBrowser) opts.cookiesBrowser = cfg.cookiesBrowser;
+      if (opts.cookiesFromBrowser === true || (!opts.cookiesBrowser && !opts.cookies && opts.cookiesFromBrowser === undefined)) {
+        opts.cookiesBrowser = opts.cookiesBrowser || detectDefaultBrowser();
+      } else if (typeof opts.cookiesFromBrowser === 'string') {
+        opts.cookiesBrowser = opts.cookiesFromBrowser;
+      }
       if (!opts.cookies && cfg.cookies) opts.cookies = cfg.cookies;
 
       opts.output = opts.output ? path.resolve(opts.output) : getDefaultOutput();

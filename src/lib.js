@@ -109,13 +109,12 @@ export function extractPlaylistId(url) {
 }
 
 // ── Stream Fetch via innertube-rs ───────────────────────
-export async function fetchStream(_client, videoId, { formatKind, quality, poToken, cookies }) {
+export async function fetchStream(_client, videoId, { formatKind, quality, cookies }) {
   const bin = resolveInnertube();
   return new Promise((resolve, reject) => {
     const fmtArg = formatKind === 'audio' ? 'mp3' : 'mp4';
     const args = ['stream', videoId, '-f', fmtArg];
     if (quality) args.push('-q', quality);
-    if (poToken) args.push('--po-token', poToken);
     if (cookies) args.push('--cookies', cookies);
 
     const proc = spawn(bin, args, { stdio: ['ignore', 'pipe', 'pipe'] });
@@ -243,7 +242,7 @@ function buildAudioArgs({ sourceMime, targetExt, quality, input }) {
 /**
  * Fetch and convert an audio format to a target file via innertube download + ffmpeg.
  */
-export async function convertAudioToFile({ videoId, format, destNoExt, targetExt, quality, poToken, cookies, onProgress }) {
+export async function convertAudioToFile({ videoId, format, destNoExt, targetExt, quality, cookies, onProgress }) {
   const outPath = `${destNoExt}.${targetExt}`;
   fs.mkdirSync(path.dirname(outPath), { recursive: true });
 
@@ -254,7 +253,6 @@ export async function convertAudioToFile({ videoId, format, destNoExt, targetExt
   try {
     const args = ['download', videoId, '-f', targetExt, '--output-audio', tmpPath];
     if (quality) args.push('-q', quality);
-    if (poToken) args.push('--po-token', poToken);
     if (cookies) args.push('--cookies', cookies);
 
     const proc = spawn(bin, args, { stdio: ['ignore', 'pipe', 'pipe'] });
@@ -304,7 +302,7 @@ export async function convertAudioToFile({ videoId, format, destNoExt, targetExt
 /**
  * Fetch video and audio streams via innertube download and mux them with ffmpeg.
  */
-export async function muxVideoToFile({ videoId, video, audio, destNoExt, targetExt, quality, poToken, cookies, onProgress }) {
+export async function muxVideoToFile({ videoId, video, audio, destNoExt, targetExt, quality, cookies, onProgress }) {
   const outPath = `${destNoExt}.${targetExt}`;
   fs.mkdirSync(path.dirname(outPath), { recursive: true });
 
@@ -316,7 +314,6 @@ export async function muxVideoToFile({ videoId, video, audio, destNoExt, targetE
   try {
     const args = ['download', videoId, '-f', targetExt, '--output-audio', tmpAudio, '--output-video', tmpVideo];
     if (quality) args.push('-q', quality);
-    if (poToken) args.push('--po-token', poToken);
     if (cookies) args.push('--cookies', cookies);
 
     const proc = spawn(bin, args, { stdio: ['ignore', 'pipe', 'pipe'] });
