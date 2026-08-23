@@ -3,7 +3,16 @@ import readline from 'node:readline';
 
 /** log('OK', pc.green, 'Download complete') -> "[OK] Download complete" */
 export function log(prefix, color, msg) {
-  console.error(`${color(`[${prefix}]`)} ${msg}`);
+  if (msg === undefined && typeof color !== 'function') {
+    if (color !== undefined) {
+      console.error(`[${prefix}] ${color}`);
+    } else {
+      console.error(prefix);
+    }
+    return;
+  }
+  const colorFn = typeof color === 'function' ? color : (s) => s;
+  console.error(`${colorFn(`[${prefix}]`)} ${msg}`);
 }
 
 export function askLine(question) {

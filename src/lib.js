@@ -80,7 +80,7 @@ export async function resolveInnertube() {
     `https://github.com/caya8205-2/avpull/releases/latest/download/${assetName}`,
   ];
 
-  log(c.cyan('⏳ innertube engine not found, downloading from GitHub...'));
+  log('INFO', c.cyan, 'innertube engine not found, downloading from GitHub...');
 
   for (const url of urls) {
     try {
@@ -92,7 +92,7 @@ export async function resolveInnertube() {
       if (process.platform !== 'win32') {
         fs.chmodSync(dest, 0o755);
       }
-      log(c.green(`✓ innertube engine downloaded: ${dest}`));
+      log('OK', c.green, `innertube engine downloaded: ${dest}`);
       _innertubeCached = dest;
       return _innertubeCached;
     } catch {}
