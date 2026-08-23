@@ -206,14 +206,14 @@ async function processOneYouTube(client, rawUrl, opts, format, index, total) {
       spin.stop(`${c.green('[OK]')} ${title} -> ${c.dim(outPath)}`);
       return;
     } catch (err) {
-      const retryMsg = attempt < maxRetries ? ` — retrying (${attempt}/${maxRetries})` : '';
-      spin.stop(`${c.red('[ERR]')} ${label} — ${err.message}${retryMsg}`);
-      if (attempt < maxRetries) {
-        await new Promise(r => setTimeout(r, 1500 * attempt));
-      } else {
-        log('INFO', c.yellow, `Falling back to yt-dlp for ${rawUrl}...`);
+      const is403 = err.message.includes('403') || err.message.includes('Forbidden');
+      if (is403 || attempt >= maxRetries) {
+        spin.stop(`${c.yellow('[INFO]')} ${label} — YouTube CDN stream restricted, falling back to yt-dlp...`);
         return await processOneExternal(rawUrl, opts, format, index, total);
       }
+      const retryMsg = ` — retrying (${attempt}/${maxRetries})`;
+      spin.stop(`${c.red('[ERR]')} ${label} — ${err.message}${retryMsg}`);
+      await new Promise(r => setTimeout(r, 1500 * attempt));
     }
   }
 }
