@@ -55,7 +55,6 @@ async function main() {
   }
 
   // Copy yt-dlp binary
-  const ext = process.platform === 'win32' ? '.exe' : '';
   const ytdlpDest = path.join(distDir, `yt-dlp${ext}`);
   let ytdlpCopied = false;
 
