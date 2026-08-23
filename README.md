@@ -11,7 +11,7 @@
 [![npm](https://img.shields.io/npm/v/avpull?style=flat&logo=npm&logoColor=white)](https://www.npmjs.com/package/avpull?activeTab=readme)
 [![Node.js](https://img.shields.io/badge/Node.js-18+-43853d?style=flat&logo=node.js&logoColor=white)](https://nodejs.org/)
 [![Bun](https://img.shields.io/badge/Bun-1.0+-f472b6?style=flat&logo=bun&logoColor=white)](https://bun.sh/)
-[![youtubei.js](https://img.shields.io/badge/youtubei.js-17.2.0-red?style=flat&logo=youtube&logoColor=white)](https://github.com/LuanRT/YouTube.js)
+[![innertube-rs](https://img.shields.io/badge/innertube--rs-Rust-dea584?style=flat&logo=rust&logoColor=white)](https://github.com/caya8205-2/innertube-rs)
 [![yt‑dlp](https://img.shields.io/badge/yt--dlp-bundled-red?style=flat&logo=youtube&logoColor=white)](https://github.com/yt-dlp/yt-dlp)
 [![FFmpeg](https://img.shields.io/badge/FFmpeg-bundled-007808?style=flat&logo=ffmpeg&logoColor=white)](https://ffmpeg.org/)
 [![License](https://img.shields.io/badge/license-MIT-blue?style=flat)](LICENSE)
@@ -157,7 +157,7 @@ avpull
 
 ### Architecture
 
-- **YouTube:** Uses [`youtubei.js`](https://github.com/LuanRT/YouTube.js) — pure JavaScript YouTube client, no external dependencies.
+- **YouTube:** Uses [`innertube-rs`](https://github.com/caya8205-2/innertube-rs) — custom high-performance Rust port of YouTube.js for fast YouTube metadata extraction and stream fetching.
 - **Other Platforms:** Uses [yt-dlp](https://github.com/yt-dlp/yt-dlp) (bundled) for Twitter/X, Instagram, Facebook, TikTok, Reddit, and 1000+ other sites.
 - **Media Processing:** FFmpeg bundled via `ffmpeg-static` — no manual installation required.
 - **Video Quality:** YouTube uses adaptive streams (video+audio muxed with ffmpeg), typically up to **1080p**. Other platforms use best available quality.
@@ -167,7 +167,7 @@ avpull
 
 - **Runtime:** Node.js 18+ / Bun 1.0+
 - **CLI Framework:** Commander.js
-- **YouTube Client:** youtubei.js
+- **YouTube Client:** [innertube-rs](https://github.com/caya8205-2/innertube-rs) (Rust)
 - **Multi-Platform Downloader:** yt-dlp (bundled)
 - **Media Processing:** FFmpeg (bundled)
 - **Colors:** picocolors

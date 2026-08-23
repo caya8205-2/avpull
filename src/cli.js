@@ -21,7 +21,7 @@ import { getMediaInfo, downloadWithYtDlp, detectDefaultBrowser } from './ytdlp.j
 import https from 'node:https';
 import { log, c, askLine, spinner } from './ui.js';
 
-const CURRENT_VERSION = '0.8.1';
+const CURRENT_VERSION = '0.9.0';
 const CONFIG_DIR = path.join(os.homedir(), '.avpull');
 const CONFIG_FILE = path.join(CONFIG_DIR, 'config.json');
 

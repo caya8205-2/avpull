@@ -1,6 +1,6 @@
 {
   "name": "avpull",
-  "version": "0.8.1",
+  "version": "0.9.0",
   "description": "Download audio/video from YouTube, convert directly to your chosen format (mp3, wav, mp4, etc.)",
   "type": "module",
   "bin": {
@@ -19,7 +19,9 @@
     "mp4",
     "cli",
     "ffmpeg",
-    "youtubei"
+    "innertube-rs",
+    "innertube",
+    "rust"
   ],
   "repository": {
     "type": "git",

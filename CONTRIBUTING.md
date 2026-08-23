@@ -232,7 +232,7 @@ The landing page uses **Hallmark design system**:
 ## 🔒 Security
 
 - **No secrets in commits** — use environment variables
-- **No credentials** — YouTube API is accessed via `youtubei.js` (no keys required)
+- **No credentials** — YouTube API is accessed via `innertube-rs` (no keys required)
 - **Dependency updates** — keep dependencies up-to-date
 
 ---
