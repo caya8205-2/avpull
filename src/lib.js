@@ -34,7 +34,6 @@ export async function resolveFfmpeg() {
   return _ffmpegCached;
 }
 
-const INNERTUBE_TARGET_VERSION = '0.3.0';
 let _innertubeCached = null;
 
 export async function resolveInnertube() {
@@ -45,16 +44,16 @@ export async function resolveInnertube() {
   const projectRoot = path.dirname(path.dirname(import.meta.url ? new URL(import.meta.url).pathname.replace(/^\/([A-Z]:)/, '$1') : process.argv[1]));
   const userCacheDir = path.join(os.homedir(), '.avpull', 'bin');
   const userCacheBin = path.join(userCacheDir, `innertube${ext}`);
-  const versionFile = path.join(userCacheDir, '.innertube-version');
 
-  // 1. Check local/bundled binaries first
-  const localCandidates = [
-    path.join(exeDir, `innertube${ext}`),
+  // 1. Check local & package binaries (installed by postinstall or bundled in release)
+  const candidates = [
     path.join(projectRoot, 'bin', `innertube${ext}`),
+    path.join(exeDir, `innertube${ext}`),
+    userCacheBin,
     path.join(projectRoot, '..', 'innertube-rs', 'target', 'release', `innertube${ext}`),
   ];
 
-  for (const c of localCandidates) {
+  for (const c of candidates) {
     try {
       if (fs.existsSync(c)) {
         _innertubeCached = c;
@@ -63,20 +62,15 @@ export async function resolveInnertube() {
     } catch {}
   }
 
-  // 2. Check user cache and verify pinned version
-  if (fs.existsSync(userCacheBin)) {
-    try {
-      if (fs.existsSync(versionFile)) {
-        const cachedVer = fs.readFileSync(versionFile, 'utf-8').trim();
-        if (cachedVer === INNERTUBE_TARGET_VERSION) {
-          _innertubeCached = userCacheBin;
-          return _innertubeCached;
-        }
-      }
-    } catch {}
-  }
+  // 2. Check system PATH
+  try {
+    const checkCmd = process.platform === 'win32' ? 'where.exe innertube' : 'which innertube';
+    execSync(checkCmd, { stdio: 'ignore' });
+    _innertubeCached = 'innertube';
+    return _innertubeCached;
+  } catch {}
 
-  // 3. Auto-download target version from GitHub releases
+  // 3. Fallback auto-download if postinstall was skipped
   const arch = process.arch === 'arm64' ? 'aarch64' : 'x86_64';
   const archiveName = process.platform === 'win32'
     ? 'innertube-windows-x86_64.zip'
@@ -91,25 +85,17 @@ export async function resolveInnertube() {
       : 'innertube-linux';
 
   const downloadTargets = [
-    // 1. Tagged release archive on innertube-rs
-    {
-      url: `https://github.com/caya8205-2/innertube-rs/releases/download/v${INNERTUBE_TARGET_VERSION}/${archiveName}`,
-      isArchive: true,
-    },
-    // 2. Latest release archive on innertube-rs
     {
       url: `https://github.com/caya8205-2/innertube-rs/releases/latest/download/${archiveName}`,
       isArchive: true,
     },
-    // 3. Fallback direct binary on avpull release
     {
       url: `https://github.com/caya8205-2/avpull/releases/latest/download/${directAssetName}`,
       isArchive: false,
     },
   ];
 
-  log('INFO', c.cyan, `Updating innertube engine to v${INNERTUBE_TARGET_VERSION}...`);
-
+  log('INFO', c.cyan, 'innertube engine not found, downloading latest from GitHub...');
   fs.mkdirSync(userCacheDir, { recursive: true });
 
   for (const target of downloadTargets) {
@@ -119,7 +105,7 @@ export async function resolveInnertube() {
       const buf = Buffer.from(await res.arrayBuffer());
 
       if (target.isArchive) {
-        const tmpArchive = path.join(os.tmpdir(), `innertube-v${INNERTUBE_TARGET_VERSION}-${Date.now()}-${archiveName}`);
+        const tmpArchive = path.join(os.tmpdir(), `innertube-latest-${Date.now()}-${archiveName}`);
         fs.writeFileSync(tmpArchive, buf);
         try {
           execSync(`tar -xf "${tmpArchive}" -C "${userCacheDir}"`, { stdio: 'ignore' });
@@ -134,21 +120,12 @@ export async function resolveInnertube() {
         if (process.platform !== 'win32') {
           fs.chmodSync(userCacheBin, 0o755);
         }
-        fs.writeFileSync(versionFile, INNERTUBE_TARGET_VERSION, 'utf-8');
-        log('OK', c.green, `innertube engine v${INNERTUBE_TARGET_VERSION} installed: ${userCacheBin}`);
+        log('OK', c.green, `innertube engine installed: ${userCacheBin}`);
         _innertubeCached = userCacheBin;
         return _innertubeCached;
       }
     } catch {}
   }
-
-  // 4. Fallback to system PATH if download fails
-  try {
-    const checkCmd = process.platform === 'win32' ? 'where.exe innertube' : 'which innertube';
-    execSync(checkCmd, { stdio: 'ignore' });
-    _innertubeCached = 'innertube';
-    return _innertubeCached;
-  } catch {}
 
   _innertubeCached = 'innertube';
   return _innertubeCached;
