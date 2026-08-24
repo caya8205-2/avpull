@@ -9,6 +9,7 @@
 ```
 
 [![npm](https://img.shields.io/npm/v/avpull?style=flat&logo=npm&logoColor=white)](https://www.npmjs.com/package/avpull?activeTab=readme)
+[![Downloads](https://img.shields.io/npm/dt/avpull)](https://www.npmjs.com/package/avpull?activeTab=readme)
 [![Node.js](https://img.shields.io/badge/Node.js-18+-43853d?style=flat&logo=node.js&logoColor=white)](https://nodejs.org/)
 [![Bun](https://img.shields.io/badge/Bun-1.0+-f472b6?style=flat&logo=bun&logoColor=white)](https://bun.sh/)
 [![innertube-rs](https://img.shields.io/badge/innertube--rs-Rust-dea584?style=flat&logo=rust&logoColor=white)](https://github.com/caya8205-2/innertube-rs)
