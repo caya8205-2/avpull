@@ -1,0 +1,5 @@
+# Auto detect text files and perform LF normalization
+* text=auto eol=lf
+
+# Ignore landing page / website from repository language statistics
+site/** linguist-documentation
