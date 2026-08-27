@@ -4,3 +4,4 @@ dist
 docs
 *.exe
 bin/*.exe
+test_output/
