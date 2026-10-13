@@ -74,18 +74,31 @@ function isNewer(a, b) {
   return false;
 }
 
+const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+
 async function checkForUpdates() {
   try {
-    const release = await fetchJson('https://api.github.com/repos/caya8205-2/avpull/releases/latest');
-    const latest = parseVersion(release.tag_name);
+    const cfg = loadConfig();
+    const now = Date.now();
+    const lastCheck = cfg.lastUpdateCheck || 0;
     const current = parseVersion(CURRENT_VERSION);
+
+    let latestTag = cfg.cachedLatestVersion;
+    if (now - lastCheck >= ONE_DAY_MS || !latestTag) {
+      const release = await fetchJson('https://api.github.com/repos/caya8205-2/avpull/releases/latest');
+      latestTag = String(release.tag_name || '').replace(/^v/, '');
+      saveConfig('lastUpdateCheck', now);
+      saveConfig('cachedLatestVersion', latestTag);
+    }
+
+    const latest = parseVersion(latestTag);
     if (!isNewer(latest, current)) return;
 
     console.log();
     log('UPDATE', c.yellow, `v${latest.join('.')} is available (current: v${current.join('.')})`);
-    
+
     // Detect how it's currently running
-    const execName = process.execPath.split(/[\\/]/).pop().toLowerCase();
+    const execName = (process.execPath || '').split(/[\\/]/).pop().toLowerCase();
     const isStandalone = execName === 'avpull.exe' || execName === 'avpull';
 
     if (isStandalone) {
